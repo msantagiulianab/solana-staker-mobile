@@ -1,39 +1,41 @@
 # solana-mobile-staker
 
-An Android-targeted Solana mobile wallet dApp built with Expo, React Native, and `@solana/kit` v2 via `@wallet-ui/react-native-kit`.
+An Android-targeted Solana mobile wallet dApp built with Expo, React Native, `@solana/kit` v2, and `@wallet-ui/react-native-kit`.
 
 ## Features
 
-- Connect/disconnect mobile wallet (Mobile Wallet Adapter)
-- View SOL balance and SPL token accounts
-- Request devnet/testnet airdrops
-- Send SOL to another address
-- Receive SOL (display QR code and address)
-- Sign arbitrary messages
-- Switch between Solana clusters (Devnet, Testnet)
-- Light/dark theme toggle
-- Staking (coming soon)
+- ✅ Connect/disconnect mobile wallet (Mobile Wallet Adapter)
+- ✅ View SOL balance and SPL token accounts (Token + Token-2022)
+- ✅ Switch between Solana clusters (Devnet, Testnet)
+- ✅ Sign arbitrary messages (Demo tab)
+- ✅ Light/dark theme toggle
+- ✅ Staking placeholder (coming soon)
+- ⬜ Request devnet/testnet airdrops (hook ready, screen pending)
+- ⬜ Send SOL (hook ready, screen pending)
+- ⬜ Receive SOL (QR code + address)
 
 ## Tech Stack
 
 - Expo SDK 55 + React Native 0.83+
 - expo-router (file-based routing)
-- @tanstack/react-query for data fetching
-- @wallet-ui/react-native-kit for wallet/Solana interactions
+- `@wallet-ui/react-native-kit` for `@solana/kit` v2 wallet/Solana interactions
+- `@tanstack/react-query` for data fetching and mutations
+- `@react-navigation/native` ThemeProvider for theming
 - Jest 29 + React Native Testing Library (TDD enforced)
 
 ## Test Status
 
-| Target | Status |
-|--------|--------|
-| `ellipsify()` utility (7 cases) | ✅ PASS |
-| `lamportsToSol()` utility (5 cases) | ✅ PASS |
-| `AccountFeature` | ⬜ TODO |
-| `StakingFeature` placeholder | ⬜ TODO |
-| `AccountUiBalance` | ⬜ TODO |
-| `WalletUiDropdown` | ⬜ TODO |
-| `ClusterProvider` | ⬜ TODO |
-| `AuthProvider` | ⬜ TODO |
+| Suite | Tests | Status |
+|-------|-------|--------|
+| `ellipsify()` utility | 7 | ✅ PASS |
+| `lamportsToSol()` utility | 5 | ✅ PASS |
+| `normalizeColorScheme` hook | 5 | ✅ PASS |
+| `useThemeColor` hook | 4 | ✅ PASS |
+| `AppTheme` provider | 1 | ✅ PASS |
+| `AppText` component | 3 | ✅ PASS |
+| `StakingFeature` placeholder | 2 | ✅ PASS |
+| `WalletUiButtonConnect` | 2 | ✅ PASS |
+| **Total** | **29** | **✅ ALL PASSING** |
 
 ## Setup
 
@@ -46,16 +48,59 @@ npm run android
 ## Project Structure
 
 ```
-src/
-├── app/                  # expo-router file-based routes
-│   ├── _layout.tsx       # Root layout with providers
-│   ├── sign-in.tsx       # Sign-in screen
-│   └── (tabs)/           # Tab navigator
-│       ├── account/      # Account screens
-│       ├── settings/     # Settings screens
-│       └── demo/         # Demo screens
-├── components/           # Shared UI & feature components
-├── constants/            # Colors, AppConfig
-├── hooks/                # Custom hooks
-├── providers/            # Context providers
-└── utils/                # Utility functions
+.
+├── app/                          # expo-router file-based routes
+│   ├── _layout.tsx               # Root layout with providers + auth guard
+│   ├── sign-in.tsx               # Sign-in screen (connect button)
+│   ├── +not-found.tsx            # 404 screen
+│   └── (tabs)/
+│       ├── _layout.tsx            # Tab navigator (Account/Settings/Demo)
+│       ├── account/index.tsx      # AccountScreen → AccountFeature
+│       ├── settings/index.tsx     # SettingsScreen (cluster, app config)
+│       └── demo/index.tsx         # DemoFeature (sign message)
+├── components/
+│   ├── account/                  # Account feature + hooks
+│   │   ├── account-feature.tsx   # Main account screen (balance, tokens, staking)
+│   │   ├── account-ui-balance.tsx # SOL balance display
+│   │   ├── use-get-balance.ts    # react-query SOL balance hook
+│   │   ├── use-get-token-accounts.ts # Token + Token-2022 account hook
+│   │   └── __tests__/
+│   ├── ui/                       # Generic UI primitives
+│   │   ├── app-view.tsx          # Theme-aware View wrapper
+│   │   ├── app-text.tsx          # Text with type variants (title, subtitle, etc.)
+│   │   ├── app-page.tsx          # SafeAreaView + AppView wrapper
+│   │   ├── ui-icon-symbol.tsx    # Icon component (Material Icons fallback)
+│   │   └── __tests__/
+│   ├── solana/                   # Solana-specific UI
+│   │   ├── base-button.tsx       # Themed button with wallet icon
+│   │   ├── wallet-ui-button-connect.tsx
+│   │   ├── use-wallet-ui-theme.ts # Theme colors for wallet components
+│   │   └── __tests__/
+│   ├── staking/                  # Staking placeholder
+│   │   ├── staking-feature.tsx
+│   │   └── __tests__/
+│   ├── app-providers.tsx         # QueryClientProvider + NetworkProvider + WalletProvider
+│   └── ...
+├── constants/
+│   ├── app-config.ts             # App identity + Solana cluster definitions
+│   ├── app-styles.ts             # Shared styles
+│   └── colors.ts                 # Light/dark color palette
+├── features/                     # Existing network feature code from template
+│   └── network/
+│       ├── network-provider.tsx  # ClusterProvider (React Context)
+│       ├── network-ui-select.tsx # Cluster dropdown selector
+│       ├── use-network.tsx       # useNetwork() hook
+│       └── ...
+├── hooks/
+│   ├── use-color-scheme.ts       # Normalizes light/dark/unspecified
+│   └── use-theme-color.ts        # Resolves theme-aware colors with overrides
+├── providers/
+│   └── app-theme.tsx             # ThemeProvider wrapper
+├── utils/
+│   ├── ellipsify.ts              # String truncation utility
+│   └── lamports-to-sol.ts        # Lamports → SOL conversion
+├── jest/
+│   └── __mocks__/@expo/          # Jest mocks for native modules
+├── test-renderer-shim.js         # createRoot() shim for react-test-renderer@19
+├── jest.config.js
+└── jest.setup.js

@@ -6,6 +6,9 @@ module.exports = {
   setupFiles: ['<rootDir>/jest.setup.js'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    '^test-renderer$': '<rootDir>/test-renderer-shim.js',
+    '^@expo/vector-icons$': '<rootDir>/jest/__mocks__/@expo/vector-icons',
+    '^@expo/vector-icons/(.*)$': '<rootDir>/jest/__mocks__/@expo/vector-icons',
   },
   resetMocks: false,
   clearMocks: false,
