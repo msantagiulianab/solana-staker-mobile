@@ -82,3 +82,27 @@ Always registering the `+not-found` screen outside conditional blocks prevents c
 
 ### Squash Plan
 All 3 unpushed commits (polyfills, Symbol-to-string fix, layout fix) will be squashed into a single commit covering the stable MWA connection loop milestone.
+
+---
+
+## 2026-07-15 — Core Staking: Validator Data Fetching via getVoteAccounts
+
+### Architectural Decisions
+- **Hook location:** Created `features/staking/use-get-validators.ts` following the same pattern as `features/network/use-network-get-genesis-hash.tsx` and `features/account/use-account-get-balance.tsx` — data-access hooks live in `features/<domain>/` as a flat file, not nested in `components/`.
+- **RPC method:** Used `client.rpc.getVoteAccounts().send()` from `@solana/kit` v2. This returns `{ current: VoteAccount[], delinquent: VoteAccount[] }`. We extract only the `current` array (active, healthy validators).
+- **Query key:** `['getVoteAccounts', chain]` — consistent with existing pattern of `[operationName, chain]`.
+- **UI component update:** `StakingFeature` (in `components/staking/`) now imports `useGetValidators`, handles loading/error/data states, and renders a `FlatList` with `votePubkey` and `commission` for each validator. The commission is rendered as a raw percentage (as returned by the RPC, e.g., `50` = 50%).
+
+### What Was Tested (7 new tests, 2 new suites, all passing)
+| Suite | Tests | Status |
+|-------|-------|--------|
+| `useGetValidators` hook | 4 | ✅ |
+| `StakingFeature` (validators FlatList) | 3 | ✅ |
+
+### MWA/Solana Complexities Handled
+- **`getVoteAccounts` RPC mock:** The `@wallet-ui/react-native-kit` `client` is deeply nested (`client.rpc.getVoteAccounts.mockReturnValue({ send: fn })`), requiring a double-level mock: `getVoteAccounts` returns `{ send: jest.fn() }` and `send` returns the actual data.
+- **Async `render` and `renderHook`:** Both return Promises in `@testing-library/react-native` v14, requiring `await` destructuring. Tests use `await renderHook(...)` and `await render(...)`.
+- **No type imports needed:** The hook returns the raw RPC response data as-is. We don't type the validator shape yet since we're just passing through `response.current`.
+
+### Test Baseline (36 tests, 10 suites)
+Post-implementation: 36 tests, 10 suites, all GREEN.

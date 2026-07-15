@@ -9,7 +9,7 @@ An Android-targeted Solana mobile wallet dApp built with Expo, React Native, `@s
 - ✅ Switch between Solana clusters (Devnet, Testnet)
 - ✅ Sign arbitrary messages (Demo tab)
 - ✅ Light/dark theme toggle
-- ✅ Staking placeholder (coming soon)
+- ✅ Staking with active validator list (votePubkey + commission) fetched via `getVoteAccounts`
 - ⬜ Request devnet/testnet airdrops (hook ready, screen pending)
 - ⬜ Send SOL (hook ready, screen pending)
 - ⬜ Receive SOL (QR code + address)
@@ -47,9 +47,10 @@ The app uses `@wallet-ui/react-native-kit` which wraps `@solana/kit` v2 and impl
 | `useThemeColor` hook | 4 | ✅ PASS |
 | `AppTheme` provider | 1 | ✅ PASS |
 | `AppText` component | 3 | ✅ PASS |
-| `StakingFeature` placeholder | 2 | ✅ PASS |
+| `StakingFeature` validators FlatList | 3 | ✅ PASS |
 | `WalletUiButtonConnect` | 2 | ✅ PASS |
-| **Total** | **29** | **✅ ALL PASSING** |
+| `useGetValidators` hook | 4 | ✅ PASS |
+| **Total** | **36** | **✅ ALL PASSING** |
 
 ## Setup
 
@@ -90,9 +91,19 @@ npm run android
 │   │   ├── wallet-ui-button-connect.tsx
 │   │   ├── use-wallet-ui-theme.ts # Theme colors for wallet components
 │   │   └── __tests__/
-│   ├── staking/                  # Staking placeholder
+│   ├── staking/                  # Staking feature with validator FlatList
 │   │   ├── staking-feature.tsx
 │   │   └── __tests__/
+├── features/                     # Data-access hooks + feature screens
+│   ├── staking/
+│   │   ├── use-get-validators.ts # react-query hook: getVoteAccounts → current[]
+│   │   └── __tests__/
+│   ├── network/                  # Network provider + hooks
+│   │   ├── network-provider.tsx  # ClusterProvider (React Context)
+│   │   ├── network-ui-select.tsx # Cluster dropdown selector
+│   │   ├── use-network.tsx       # useNetwork() hook
+│   │   └── ...
+│   └── account/                  # Account feature screens (sign, disconnect, etc.)
 │   ├── app-providers.tsx         # QueryClientProvider + NetworkProvider + WalletProvider
 │   └── ...
 ├── constants/
