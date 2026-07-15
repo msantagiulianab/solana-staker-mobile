@@ -106,3 +106,39 @@ All 3 unpushed commits (polyfills, Symbol-to-string fix, layout fix) will be squ
 
 ### Test Baseline (36 tests, 10 suites)
 Post-implementation: 36 tests, 10 suites, all GREEN.
+
+---
+
+## 2026-07-15 — Route Auth Guard & Staking Coverage Regression Tests
+
+### Context
+Performed a comprehensive repository health check to ensure Staking tab and routing changes are fully tested and securely versioned.
+
+### Coverage Audit Findings
+- **`app/_layout.tsx` (auth guard):** 0% tested. The `useEffect` that redirects unauthenticated users to `/sign-in` and authenticated users to `/staking` was untested.
+- **`app/(tabs)/_layout.tsx` (tab layout):** 0% tested. No smoke test for the 4-tab `Tabs` navigator.
+- **`app/(tabs)/staking/index.tsx` (staking page):** 0% tested. No smoke test.
+- **`StakingFeature` loading/error states:** Only happy path was tested; loading and error branches were untested.
+
+### Tests Added (7 new tests, 3 new suites)
+
+| Suite | Tests | Status |
+|-------|-------|--------|
+| `RootLayout auth guard routing` | 5 | ✅ |
+| `Tab layout` | 1 | ✅ |
+| `Staking page` | 1 | ✅ |
+
+### StakingFeature Expanded
+
+| Branch | Tests | Status |
+|--------|-------|--------|
+| Loading state | 1 | ✅ |
+| Error state | 1 | ✅ |
+
+### jest.mock Complexity Handled
+- **`expo-router` Stack/Tabs.Screen static properties:** The `jest.mock` factory function must create mock components inside the factory closure because `jest.mock` factories are hoisted above `const` declarations (Temporal Dead Zone). `Stack.Screen`, `Stack.Group`, and `Tabs.Screen` must be attached as static properties on the mock component function.
+- **ESM module mock:** `@wallet-ui/react-native-kit` is an ESM module (`*.mjs`) that cannot be parsed by Jest. All tests that transitively import it must use a factory-function mock with `jest.mock('@wallet-ui/react-native-kit', () => ({...}))`.
+- **Factory mock vs auto-mock:** `jest.mock('@/features/staking/use-get-validators')` without a factory creates an auto-mock that still tries to parse the real module (which imports `@wallet-ui/react-native-kit`). Must always use a factory function `() => ({ useGetValidators: () => mockFn() })`.
+
+### Test Baseline (43 tests, 12 suites)
+Post-audit: 43 tests, 12 suites, all GREEN.

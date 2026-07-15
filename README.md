@@ -47,10 +47,13 @@ The app uses `@wallet-ui/react-native-kit` which wraps `@solana/kit` v2 and impl
 | `useThemeColor` hook | 4 | ✅ PASS |
 | `AppTheme` provider | 1 | ✅ PASS |
 | `AppText` component | 3 | ✅ PASS |
-| `StakingFeature` validators FlatList | 3 | ✅ PASS |
 | `WalletUiButtonConnect` | 2 | ✅ PASS |
 | `useGetValidators` hook | 4 | ✅ PASS |
-| **Total** | **36** | **✅ ALL PASSING** |
+| `StakingFeature` (happy path + loading + error) | 5 | ✅ PASS |
+| `RootLayout` auth guard routing | 5 | ✅ PASS |
+| `Tab layout` | 1 | ✅ PASS |
+| `Staking page` | 1 | ✅ PASS |
+| **Total** | **43** | **✅ ALL PASSING** |
 
 ## Setup
 
