@@ -3,6 +3,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons'
 import { useThemeColor } from '@/hooks/use-theme-color'
 
 const nameMap: Record<string, React.ComponentProps<typeof MaterialIcons>['name']> = {
+  'chart.pie.fill': 'pie-chart',
   'gearshape.fill': 'settings',
   'wallet.pass.fill': 'wallet',
   'ladybug.fill': 'bug-report',

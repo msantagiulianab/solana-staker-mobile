@@ -27,6 +27,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="staking"
+        options={{
+          title: 'Staking',
+          tabBarIcon: ({ color }) => <UiIconSymbol name="chart.pie.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="demo"
         options={{
           title: 'Demo',
