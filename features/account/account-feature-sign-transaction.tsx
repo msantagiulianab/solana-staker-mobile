@@ -12,7 +12,7 @@ export function AccountFeatureSignTransaction({ address }: { address: Address })
     try {
       const instructions: Instruction[] = [
         // You can add more instructions here
-        getAddMemoInstruction({ memo: `gm from Mobile Wallet Adapter - ${address}` }),
+        getAddMemoInstruction({ memo: `gm from Mobile Wallet Adapter - ${String(address)}` }),
       ]
 
       const signature = await sendTransactions(instructions)

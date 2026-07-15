@@ -9,7 +9,7 @@ export function AccountFeatureSignMessage({ address }: { address: Address }) {
   const [title, setTitle] = useState('Sign Message')
   async function submit() {
     try {
-      await signMessages(new TextEncoder().encode(`Signing a message with ${address}`))
+      await signMessages(new TextEncoder().encode(`Signing a message with ${String(address)}`))
       setTitle('Message Signed!')
       console.log('Message signed!')
     } catch (e) {

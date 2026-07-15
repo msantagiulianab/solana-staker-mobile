@@ -23,6 +23,20 @@ An Android-targeted Solana mobile wallet dApp built with Expo, React Native, `@s
 - `@react-navigation/native` ThemeProvider for theming
 - Jest 29 + React Native Testing Library (TDD enforced)
 
+## Hermes & Mobile Wallet Adapter Runtime Notes
+
+### Crypto Polyfills (Required for Hermes)
+React Native's Hermes engine does not provide Web Crypto or `Buffer` globals that `@solana/kit` and `@noble/*` depend on. The app loads these polyfills in `polyfill.js` **before** any application code (`index.js`). Order matters:
+1. `buffer` — global `Buffer` polyfill
+2. `react-native-url-polyfill` — WHATWG URL API
+3. `react-native-get-random-values` — `crypto.getRandomValues()`
+
+### Branded `Address` Type Coercion
+The `Address` type from `@solana/kit` is a branded nominal type (`NominalType<"brand", "Address">`). Hermes throws `TypeError: Cannot convert Symbol to string` when branded `Address` values are interpolated into template literals or passed to string methods like `.length`. Always wrap `Address` values with `String()` before string operations, template literal interpolation, or `.substring()` / `.length` calls.
+
+### Phantom / MWA Connection
+The app uses `@wallet-ui/react-native-kit` which wraps `@solana/kit` v2 and implements the Mobile Wallet Adapter protocol. Connection flow: `NetworkProvider` → `MobileWalletProvider` (reads `selectedNetwork`) → children. Wallet state is accessed via `useMobileWallet()` hook exposing `account`, `connect`, `disconnect`, `signMessages`, `chain`, and `client`.
+
 ## Test Status
 
 | Suite | Tests | Status |

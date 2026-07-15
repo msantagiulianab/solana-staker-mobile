@@ -11,13 +11,11 @@ function RootNavigator() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       {isAuthenticated ? (
-        <>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="+not-found" />
-        </>
+        <Stack.Screen name="(tabs)" />
       ) : (
         <Stack.Screen name="sign-in" />
       )}
+      <Stack.Screen name="+not-found" />
     </Stack>
   )
 }
