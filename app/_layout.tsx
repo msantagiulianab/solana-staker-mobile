@@ -17,7 +17,7 @@ function RootNavigator() {
     if (!isAuthenticated && inTabsGroup) {
       router.replace('/sign-in')
     } else if (isAuthenticated && !inTabsGroup) {
-      router.replace('/(tabs)' as never)
+      router.replace('/')
     }
   }, [isAuthenticated, segments])
 
