@@ -142,3 +142,27 @@ Performed a comprehensive repository health check to ensure Staking tab and rout
 
 ### Test Baseline (43 tests, 12 suites)
 Post-audit: 43 tests, 12 suites, all GREEN.
+
+---
+
+## 2026-07-16 — Validator Filtering & Sorting via useMemo (Logic Route)
+
+### Architectural Decisions
+- **Filter logic:** Validators with `commission === 100` are excluded. Commission of 100% means the validator takes all rewards and gives nothing to delegators — these are not viable staking options.
+- **Sort logic:** Remaining validators sorted by `commission` ascending (lowest fees first). On tie, secondary sort by `activatedStake` descending (highest trusted stake first), aligning with Solana's best-practice validator selection.
+- **Memoization:** Used `useMemo` with `[validators]` dependency to avoid re-filtering/re-sorting on every render. The memo returns `[]` when `validators` is falsy (loading/error guard).
+- **testID on FlatList:** Added `testID="validator-list"` to the FlatList for clean test access without `UNSAFE_*` APIs. Tests inspect the `data` prop directly to verify sort order.
+
+### What Was Tested (2 new tests, 2 updated tests)
+| Test | Status |
+|------|--------|
+| `filters out validators with 100% commission` | ✅ |
+| `sorts validators by commission ascending (0% before 5% before 50%)` | ✅ |
+| `renders validator votePubkeys ... (excluding 100% filtered)` | ✅ (updated) |
+| `renders validator commissions (excluding filtered 100%)` | ✅ (updated) |
+
+### Test Strategy for Sort Verification
+Rather than using `getAllByText` regex matching on rendered text (which breaks due to React children interpolation arrays), the test uses `getByTestId('validator-list')` to access the FlatList instance and asserts on `flatList.props.data` directly — verifying both the commission values and the exact `votePubkey` order.
+
+### Test Baseline (45 tests, 12 suites)
+Post-implementation: 45 tests, 12 suites, all GREEN.
