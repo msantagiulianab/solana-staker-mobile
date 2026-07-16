@@ -166,3 +166,35 @@ Rather than using `getAllByText` regex matching on rendered text (which breaks d
 
 ### Test Baseline (45 tests, 12 suites)
 Post-implementation: 45 tests, 12 suites, all GREEN.
+
+---
+
+## 2026-07-16 — ValidatorCard Component: UI/UX Card Layout
+
+### Architectural Decisions
+- **New component `ValidatorCard`** in `components/staking/validator-card.tsx` following the project's pattern of domain-specific UI components (parallel to `account-ui-balance.tsx`, `wallet-ui-button-connect.tsx`).
+- **Props:** `votePubkey: string` and `commission: number` — minimal, single-responsibility interface.
+- **Ellipsification:** Uses the existing `ellipsify()` utility with default parameters (4 chars prefix, 4 chars suffix, `..` delimiter) to truncate long public keys for clean mobile display.
+- **Card styling:** Rounded corners (`borderRadius: 12`), subtle border (`#e0e0e0`), shadow + elevation for depth, `flexDirection: 'row'` with `justifyContent: 'space-between'` for the commission row — aligns label left and value right.
+- **StakingFeature updated:** `renderItem` now returns `<ValidatorCard>` instead of raw `<AppView>` + `<AppText>`. The `validatorItem` styles were removed from `StakingFeature`'s `StyleSheet` since they're now internal to `ValidatorCard`.
+
+### What Was Tested (5 new tests, 1 new suite)
+| Suite | Tests | Status |
+|-------|-------|--------|
+| `ValidatorCard` | 5 | ✅ |
+
+| Test | Verification |
+|------|-------------|
+| `renders the ellipsified votePubkey` | Long key "VeryLongValidatorPubKey123456789" → "Very..6789" |
+| `renders the commission percentage` | `10` → renders "10%" |
+| `renders the "Commission:" label` | Label text present |
+| `does not truncate a short votePubkey` | Short key "abc" unchanged |
+| `renders 0% commission correctly` | Zero edge case verified |
+
+### Existing StakingFeature Tests Updated
+All text assertions updated to match ValidatorCard's output format:
+- `Vote Key: abc123` → `abc123` (pubkey now rendered directly via `ellipsify`)
+- `Commission: 50%` → `50%` + `Commission:` label (split into separate elements)
+
+### Test Baseline (50 tests, 13 suites)
+Post-implementation: 50 tests, 13 suites, all GREEN.

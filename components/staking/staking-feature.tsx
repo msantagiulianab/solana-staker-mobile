@@ -3,6 +3,7 @@ import { FlatList, StyleSheet } from 'react-native'
 import { AppView } from '@/components/ui/app-view'
 import { AppText } from '@/components/ui/app-text'
 import { useGetValidators } from '@/features/staking/use-get-validators'
+import { ValidatorCard } from '@/components/staking/validator-card'
 
 export function StakingFeature() {
   const { data: validators, isLoading, isError } = useGetValidators()
@@ -45,10 +46,7 @@ export function StakingFeature() {
         data={filteredSortedValidators}
         keyExtractor={(item) => item.votePubkey}
         renderItem={({ item }) => (
-          <AppView style={styles.validatorItem}>
-            <AppText>Vote Key: {item.votePubkey}</AppText>
-            <AppText>Commission: {item.commission}%</AppText>
-          </AppView>
+          <ValidatorCard votePubkey={item.votePubkey} commission={item.commission} />
         )}
       />
     </AppView>
@@ -59,12 +57,5 @@ const styles = StyleSheet.create({
   card: {
     padding: 16,
     borderRadius: 8,
-  },
-  validatorItem: {
-    marginTop: 8,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 4,
   },
 })

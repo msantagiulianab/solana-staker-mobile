@@ -54,33 +54,33 @@ describe('StakingFeature', () => {
       await waitFor(() => expect(getByText('Staking')).toBeTruthy())
     })
 
-    it('renders validator votePubkeys from useGetValidators (excluding 100% filtered)', async () => {
+    it('renders ellipsified validator pubkeys from ValidatorCard (excluding 100% filtered)', async () => {
       const { getByText, queryByText } = await render(<StakingFeature />, {
         wrapper: createWrapper(),
       })
-      await waitFor(() => expect(getByText('Vote Key: abc123')).toBeTruthy())
-      expect(getByText('Vote Key: ghi789')).toBeTruthy()
-      expect(getByText('Vote Key: jkl012')).toBeTruthy()
+      await waitFor(() => expect(getByText('abc123')).toBeTruthy())
+      expect(getByText('ghi789')).toBeTruthy()
+      expect(getByText('jkl012')).toBeTruthy()
       // 100% commission validator should be filtered out
-      expect(queryByText('Vote Key: def456')).toBeNull()
+      expect(queryByText('def456')).toBeNull()
     })
 
-    it('renders validator commissions (excluding filtered 100%)', async () => {
+    it('renders commission percentages via ValidatorCard (excluding filtered 100%)', async () => {
       const { getByText, queryByText } = await render(<StakingFeature />, {
         wrapper: createWrapper(),
       })
-      await waitFor(() => expect(getByText('Commission: 50%')).toBeTruthy())
-      expect(getByText('Commission: 0%')).toBeTruthy()
-      expect(getByText('Commission: 5%')).toBeTruthy()
-      expect(queryByText('Commission: 100%')).toBeNull()
+      await waitFor(() => expect(getByText('50%')).toBeTruthy())
+      expect(getByText('0%')).toBeTruthy()
+      expect(getByText('5%')).toBeTruthy()
+      expect(queryByText('100%')).toBeNull()
     })
 
     it('filters out validators with 100% commission', async () => {
       const { queryByText } = await render(<StakingFeature />, {
         wrapper: createWrapper(),
       })
-      await waitFor(() => expect(queryByText('Vote Key: def456')).toBeNull())
-      expect(queryByText('Commission: 100%')).toBeNull()
+      await waitFor(() => expect(queryByText('def456')).toBeNull())
+      expect(queryByText('100%')).toBeNull()
     })
 
     it('sorts validators by commission ascending (0% before 5% before 50%)', async () => {
