@@ -1,11 +1,13 @@
 import React, { useMemo } from 'react'
 import { FlatList, StyleSheet } from 'react-native'
+import { useRouter } from 'expo-router'
 import { AppView } from '@/components/ui/app-view'
 import { AppText } from '@/components/ui/app-text'
 import { useGetValidators } from '@/features/staking/use-get-validators'
 import { ValidatorCard } from '@/components/staking/validator-card'
 
 export function StakingFeature() {
+  const router = useRouter()
   const { data: validators, isLoading, isError } = useGetValidators()
 
   const filteredSortedValidators = useMemo(() => {
@@ -46,7 +48,11 @@ export function StakingFeature() {
         data={filteredSortedValidators}
         keyExtractor={(item) => item.votePubkey}
         renderItem={({ item }) => (
-          <ValidatorCard votePubkey={item.votePubkey} commission={item.commission} />
+          <ValidatorCard
+            votePubkey={item.votePubkey}
+            commission={item.commission}
+            onPress={() => router.push(`/staking/${String(item.votePubkey)}`)}
+          />
         )}
       />
     </AppView>

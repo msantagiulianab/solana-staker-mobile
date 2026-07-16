@@ -198,3 +198,31 @@ All text assertions updated to match ValidatorCard's output format:
 
 ### Test Baseline (50 tests, 13 suites)
 Post-implementation: 50 tests, 13 suites, all GREEN.
+
+---
+
+## 2026-07-16 — Phase 3: Staking Flow — Interactive Cards + Dynamic Route
+
+### Architectural Decisions
+- **Interactive ValidatorCard:** Wrapped card content in `TouchableOpacity` with `activeOpacity={0.7}` for press feedback. Added optional `onPress` prop and `accessibilityRole="button"` for proper screen reader support.
+- **Expo Router dynamic routing:** Used `useRouter().push(`/staking/${String(votePubkey)}`)` in `StakingFeature` to navigate to a per-validator staking screen. The `String()` coercion is required because `votePubkey` is a branded `Address` type from `@solana/kit` (same issue as the 2026-07-11 Symbol-to-String fix).
+- **Dynamic route screen** `app/(tabs)/staking/[votePubkey].tsx`: Uses `useLocalSearchParams` to extract `votePubkey`. Displays full pubkey (selectable), numeric `TextInput` for SOL amount, and a styled "Stake SOL" button. No transaction logic yet — pure UI placeholder.
+- **Test approach for onPress:** Due to `react-test-renderer` shim incompatibility with `TouchableOpacity` press simulation, the `onPress` test verifies the `testID` is rendered on the touchable element. This matches existing project patterns (e.g., `WalletUiButtonConnect` does not simulate clicks either).
+
+### What Was Tested (6 new tests, 1 new suite, 1 updated suite)
+| Suite | Tests | Status |
+|-------|-------|--------|
+| `ValidatorCard` (onPress card) | 6 (+1) | ✅ |
+| `Staking [votePubkey] screen` | 4 | ✅ |
+| `StakingFeature` (expo-router mock) | 7 (updated) | ✅ |
+
+| Test | Verification |
+|------|-------------|
+| `renders as a touchable card with an onPress handler` | testID "validator-card" present in DOM |
+| `renders the votePubkey header` | "Stake with Validator" title |
+| `displays the full votePubkey from params` | "abc123" from mock params |
+| `renders the SOL amount TextInput` | placeholder "0.0" present |
+| `renders the Stake SOL button` | "Stake SOL" text rendered |
+
+### Test Baseline (55 tests, 14 suites)
+Post-implementation: 55 tests, 14 suites, all GREEN.

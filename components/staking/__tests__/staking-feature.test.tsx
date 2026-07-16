@@ -10,9 +10,14 @@ const mockValidators = [
 ]
 
 const mockUseGetValidators = jest.fn()
+const mockPush = jest.fn()
 
 jest.mock('@/features/staking/use-get-validators', () => ({
   useGetValidators: () => mockUseGetValidators(),
+}))
+
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ push: mockPush }),
 }))
 
 jest.mock('@/hooks/use-color-scheme', () => ({

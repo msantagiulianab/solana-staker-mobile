@@ -9,7 +9,8 @@ An Android-targeted Solana mobile wallet dApp built with Expo, React Native, `@s
 - ✅ Switch between Solana clusters (Devnet, Testnet)
 - ✅ Sign arbitrary messages (Demo tab)
 - ✅ Light/dark theme toggle
-- ✅ Staking with styled ValidatorCard UI (ellipsified pubkey, commission badge), filtered & sorted (commission < 100%, sorted by fee ascending + stake descending)
+- ✅ Staking with interactive ValidatorCard UI → tap to navigate to per-validator stake screen (dynamic route with SOL amount input + Stake button)
+- ✅ Staking list: filtered (commission < 100%) & sorted (fee ascending + stake descending)
 - ⬜ Request devnet/testnet airdrops (hook ready, screen pending)
 - ⬜ Send SOL (hook ready, screen pending)
 - ⬜ Receive SOL (QR code + address)
@@ -49,12 +50,13 @@ The app uses `@wallet-ui/react-native-kit` which wraps `@solana/kit` v2 and impl
 | `AppText` component | 3 | ✅ PASS |
 | `WalletUiButtonConnect` | 2 | ✅ PASS |
 | `useGetValidators` hook | 4 | ✅ PASS |
-| `ValidatorCard` component | 5 | ✅ PASS |
-| `StakingFeature` (filter, sort, loading, error with ValidatorCard) | 7 | ✅ PASS |
+| `ValidatorCard` component | 6 | ✅ PASS |
+| `StakingFeature` (filter, sort, navigation, loading, error) | 7 | ✅ PASS |
+| `Staking [votePubkey] screen` | 4 | ✅ PASS |
 | `RootLayout` auth guard routing | 5 | ✅ PASS |
 | `Tab layout` | 1 | ✅ PASS |
 | `Staking page` | 1 | ✅ PASS |
-| **Total** | **50** | **✅ ALL PASSING** |
+| **Total** | **55** | **✅ ALL PASSING** |
 
 ## Setup
 

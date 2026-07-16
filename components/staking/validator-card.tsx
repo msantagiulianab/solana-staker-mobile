@@ -1,5 +1,5 @@
 import React from 'react'
-import { StyleSheet } from 'react-native'
+import { StyleSheet, TouchableOpacity } from 'react-native'
 import { AppView } from '@/components/ui/app-view'
 import { AppText } from '@/components/ui/app-text'
 import { ellipsify } from '@/utils/ellipsify'
@@ -7,11 +7,12 @@ import { ellipsify } from '@/utils/ellipsify'
 interface ValidatorCardProps {
   votePubkey: string
   commission: number
+  onPress?: () => void
 }
 
-export function ValidatorCard({ votePubkey, commission }: ValidatorCardProps) {
+export function ValidatorCard({ votePubkey, commission, onPress }: ValidatorCardProps) {
   return (
-    <AppView style={styles.card}>
+    <TouchableOpacity testID="validator-card" onPress={onPress} activeOpacity={0.7} accessibilityRole="button" style={styles.card}>
       <AppText type="defaultSemiBold" style={styles.pubkey}>
         {ellipsify(votePubkey)}
       </AppText>
@@ -21,7 +22,7 @@ export function ValidatorCard({ votePubkey, commission }: ValidatorCardProps) {
           {commission}%
         </AppText>
       </AppView>
-    </AppView>
+    </TouchableOpacity>
   )
 }
 
