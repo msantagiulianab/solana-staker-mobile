@@ -226,3 +226,50 @@ Post-implementation: 50 tests, 13 suites, all GREEN.
 
 ### Test Baseline (55 tests, 14 suites)
 Post-implementation: 55 tests, 14 suites, all GREEN.
+
+---
+
+## 2026-07-16 — Phase 4: On-Chain Staking Transaction (Stake SOL Button)
+
+### Architectural Decisions
+- **Pure logic extraction:** The staking handler logic lives in `createHandleStake(account, amount, votePubkey, sendTransactions)`, an exported pure factory function. Tests import it directly and invoke the returned async function — no DOM event simulation needed. This sidesteps RNTL's inability to trigger `Pressable.onPress` or `TouchableOpacity.onPress` via `fireEvent.press` (React Native's native gesture responder system intercepts before RNTL's JS-level events reach the handler).
+- **Dependency injection:** `sendTransactions` (from `useMobileWallet()`) is passed as a parameter to `createHandleStake`, enabling tests to supply a `jest.fn()` mock without mocking the entire `@wallet-ui/react-native-kit` module. The component wires it via `useCallback(createHandleStake(account, amount, votePubkey, sendTransactions), [...])`.
+- **Component uses `Pressable`** with `testID="stake-button"` and `onPress={handleStake}`, replacing the static `AppView` placeholder from Phase 3.
+- **Stake program clients:** Installed `@solana-program/stake@0.7.2` (peer: `@solana/kit@^6.4.0`) and `@solana-program/system@0.12.2` (peer: `@solana/kit@^6.4.0`) for typed instruction builders: `getCreateAccountInstruction`, `getInitializeCheckedInstruction`, `getDelegateStakeInstruction`. Both use `--legacy-peer-deps` due to Expo 55 / React Native 0.83 peer conflicts.
+- **Validation order:** 1) Account check (must be connected), 2) Amount check (`!amount || isNaN(Number(amount)) || Number(amount) <= 0`), 3) Vote pubkey check. All validation happens before any `solToLamports` or `generateKeyPairSigner` calls — no silent crashes.
+
+### Transaction Building Flow
+1. `generateKeyPairSigner()` creates a new stake account keypair.
+2. `getCreateAccountInstruction` transfers SOL (amount + rent-exempt minimum of 2,282,880 lamports) from user to new stake account, allocating 200 bytes owned by the Stake program.
+3. `getInitializeCheckedInstruction` initializes the stake account state with user as both stake and withdraw authority.
+4. `getDelegateStakeInstruction` delegates the initialized stake to the validator's vote pubkey.
+5. `sendTransactions(instructions)` signs and sends via Mobile Wallet Adapter bridge.
+
+### What Was Tested (10 tests, 1 suite, all passing)
+| Suite | Tests | Status |
+|-------|-------|--------|
+| `Staking [votePubkey] screen` | 10 | ✅ |
+
+| Test | Status |
+|------|--------|
+| renders the votePubkey header | ✅ |
+| displays the full votePubkey from params | ✅ |
+| renders the SOL amount TextInput | ✅ |
+| renders the Stake SOL button | ✅ |
+| shows error alert when user is not connected | ✅ |
+| shows error alert when amount is zero or invalid | ✅ |
+| shows error alert when votePubkey is missing | ✅ |
+| builds and sends the correct staking transaction | ✅ |
+| shows success alert with transaction signature | ✅ |
+| shows error alert on transaction failure | ✅ |
+
+### MWA/Solana Complexities Handled
+- **Jest mock hoisting:** `jest.mock()` factories execute before variable declarations. Mock functions must be defined inline inside factory functions — external `const` references are `undefined` at hoist time.
+- **`jest.clearAllMocks()` destroys mock implementations:** This resets `jest.fn(() => ({ account, sendTransactions }))` to `jest.fn()` (returning `undefined`), causing silent component crash on destructure. Replaced with targeted `jest.mocked().mockClear()` on each individual mock.
+- **RNTL cannot trigger `Pressable.onPress` or `TouchableOpacity.onPress`:** Both components use React Native's native gesture responder system internally, which RNTL's JS-level `fireEvent.press`/`pressIn`/`pressOut`/`touchStart`/`touchEnd`/`responderRelease` events cannot reach. The pure function extraction pattern eliminates this limitation entirely.
+- **`@solana/kit` v2 branded types:** `address()`, `sol()` functions produce branded nominal types. Instruction builders require these typed values; tests mock `address` and `sol` as identity functions to bypass runtime validation.
+- **Rent-exempt math:** `2_282_880n` lamports for a 200-byte stake account. Total = stake amount + rent, verified in test assertion (`1_502_282_880n = 1_500_000_000 + 2_282_880`).
+- **`sendTransactions` signature:** Returns `Promise<string>` (the transaction signature). Component's `useMobileWallet().sendTransactions` is passed as 4th argument to pure factory.
+
+### Test Baseline (65 tests, 14 suites)
+Post-implementation: 65 tests, 14 suites, all GREEN.
