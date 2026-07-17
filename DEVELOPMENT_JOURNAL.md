@@ -320,3 +320,48 @@ Post-implementation: 65 tests, 14 suites, all GREEN.
 
 ### Test Baseline (68 tests, 15 suites)
 Post-implementation: 68 tests, 15 suites, all GREEN.
+
+---
+
+## 2026-07-16 — Phase 5: Portfolio Dashboard UI Component
+
+### Architectural Decisions
+- **Component location:** `features/staking/PortfolioDashboard.tsx` — UI component separated from data-access hook following the established pattern (`features/` for data + presentation, `components/` for reusable primitives).
+- **Props interface:** `{ address: string }` — the component receives the user's wallet address and passes it to `useGetStakeAccounts`. No `useMobileWallet` dependency at this level; the parent component (Account/staking page) wires the wallet address.
+- **State branches:** Loading → "Loading stake accounts...", Error → "Failed to load stake accounts.", Empty → "No stake accounts found.", Data → FlatList of stake account cards.
+- **Each card displays:**
+  - Truncated pubkey (via `ellipsify`, 4+4 chars)
+  - State badge with color (`getStakeStateColor`: active=green, activating=orange, deactivating=red, inactive=gray)
+  - Delegated amount in SOL (via `lamportsToSol`, formatted to 2 decimal places)
+  - Vote key (truncated, optional)
+- **Pure helpers exported for direct testing:**
+  - `STAKE_STATE_LABELS` — Record mapping state → human-readable label
+  - `getStakeStateColor(state)` — Returns hex color string for given state
+  - `formatDelegatedAmount(account)` — Returns "N/A" for undefined, otherwise "X.XX SOL"
+
+### What Was Tested (14 tests, 3 describe blocks)
+| Suite | Tests | Status |
+|-------|-------|--------|
+| `getStakeStateColor` (pure) | 4 | ✅ |
+| `STAKE_STATE_LABELS` (pure) | 1 | ✅ |
+| `PortfolioDashboard` (component) | 9 | ✅ |
+
+| Test | Status |
+|------|--------|
+| returns green for active | ✅ |
+| returns orange for activating | ✅ |
+| returns red for deactivating | ✅ |
+| returns gray for inactive | ✅ |
+| has human-readable labels for all states | ✅ |
+| passes the address to useGetStakeAccounts | ✅ |
+| renders loading indicator when isLoading is true | ✅ |
+| renders error message when isError is true | ✅ |
+| renders empty state when data is an empty array | ✅ |
+| renders stake account cards with delegated amount in SOL | ✅ |
+| renders stake account cards with state badges | ✅ |
+| renders truncated pubkeys for each account | ✅ |
+| shows "N/A" for delegatedAmount when undefined | ✅ |
+| renders title header | ✅ |
+
+### Test Baseline (82 tests, 16 suites)
+Post-implementation: 82 tests, 16 suites, all GREEN.

@@ -59,7 +59,8 @@ The app uses `@wallet-ui/react-native-kit` which wraps `@solana/kit` v2 and impl
 | `Tab layout` | 1 | ✅ PASS |
 | `Staking page` | 1 | ✅ PASS |
 | `useGetStakeAccounts` hook | 7 | ✅ PASS |
-| **Total** | **68** | **✅ ALL PASSING** |
+| `PortfolioDashboard` component | 14 | ✅ PASS |
+| **Total** | **82** | **✅ ALL PASSING** |
 
 ## Setup
 
@@ -108,6 +109,7 @@ npm run android
 │   ├── staking/
 │   │   ├── use-get-validators.ts        # react-query hook: getVoteAccounts → current[]
 │   │   ├── use-get-stake-accounts.ts    # react-query hook: getProgramAccounts + stake state derivation
+│   │   ├── PortfolioDashboard.tsx       # UI component: FlatList of stake cards with state badges
 │   │   └── __tests__/
 │   ├── network/                  # Network provider + hooks
 │   │   ├── network-provider.tsx  # ClusterProvider (React Context)
