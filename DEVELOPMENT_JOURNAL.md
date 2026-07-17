@@ -400,3 +400,55 @@ Post-implementation: 82 tests, 16 suites, all GREEN.
 
 ### Test Baseline (91 tests, 17 suites)
 Post-implementation: 91 tests, 17 suites, all GREEN.
+
+---
+
+## 2026-07-17 — Phase 6: UI Integration — StakeManagerModal + PortfolioDashboard Tap-to-Open
+
+### Architectural Decisions
+- **Component location:** `components/account/StakeManagerModal.tsx` — modal component placed alongside existing `account-feature.tsx` and `account-ui-balance.tsx` since it manages individual stake accounts (a sub-concern of the Account domain).
+- **Props interface:** `{ stakeAccount: StakeAccountInfo, visible: boolean, onClose: () => void }` — minimal, single-responsibility. The modal does not own visibility state; the parent (PortfolioDashboard) controls it via `visible`/`onClose`.
+- **Pure helper `showDeactivateButton(state)`:** Exported and tested directly without rendering. Returns `true` only for `'active'` and `'activating'` states — deactivating and inactive accounts should not show the deactivate button.
+- **Deactivation wiring:** Uses `useMobileWallet()` inside the modal to extract `account?.address` (authorized pubkey) and `sendTransactions`. These are passed to `createHandleDeactivate()` from Phase 5 via `useMemo` dependency on `[stakeAccount.pubkey, account?.address, sendTransactions]`.
+- **PortfolioDashboard tap-to-open:** Each stake account `FlatList` row is now wrapped in a `<Pressable>` with an `onPress` handler created by `createHandleSelectStakeAccount(account, setSelectedAccount, setModalVisible)` — a pure factory. When called, it sets the selected account in state and opens the modal. This follows the pure-logic-extraction pattern from `.clinerules`: press handlers are extracted as exported factories, tested directly without rendering, while the component merely wires the factory to `onPress`.
+- **Imported UI primitives** from `PortfolioDashboard`: `STAKE_STATE_LABELS` and `getStakeStateColor` — reused in the modal to display consistent state badges and colors, avoiding duplication.
+- **Modal UI:** Uses React Native `Modal` with `transparent` + `animationType="slide"`. The overlay has `rgba(0,0,0,0.5)` for a dimming effect. The card displays Address (selectable), Status (colored badge), Delegated amount (SOL, 2 decimals), and Validator vote pubkey (or "N/A"). The "Deactivate Stake" button is styled in red (`#F44336`) and only rendered when `canDeactivate` is true.
+
+### Test Architecture
+- **StakeManagerModal tests (16 tests):** Mock `createHandleDeactivate`, `useMobileWallet`, and `PortfolioDashboard` exports to isolate the modal from ESM `@solana/kit`/`@solana-program/stake` chain. The `@solana/kit` ESM entry-point crashes Jest; the `PortfolioDashboard` mock prevents the transitive import of `use-get-stake-accounts` → `@solana-program/stake` → `@solana/kit`.
+- **PortfolioDashboard expanded tests (2 new pure factory tests):** `createHandleSelectStakeAccount` tested directly with mock `setSelectedAccount`/`setModalVisible` state setters. The modal itself is mocked (`jest.mock('@/components/account/StakeManagerModal')`) to prevent ESM cascade.
+
+### What Was Tested (18 new tests, 2 new suites)
+| Suite | Tests | Status |
+|-------|-------|--------|
+| `showDeactivateButton` (pure) | 4 | ✅ |
+| `StakeManagerModal` (component) | 12 | ✅ |
+| `createHandleSelectStakeAccount` (pure factory) | 2 | ✅ |
+
+| Test | Status |
+|------|--------|
+| returns true for active state | ✅ |
+| returns true for activating state | ✅ |
+| returns false for deactivating state | ✅ |
+| returns false for inactive state | ✅ |
+| renders nothing when visible is false | ✅ |
+| renders modal content when visible is true | ✅ |
+| displays the stake account pubkey | ✅ |
+| displays the stake account status with correct label | ✅ |
+| displays the delegated amount in SOL | ✅ |
+| displays voter pubkey | ✅ |
+| shows N/A when voterPubkey is undefined | ✅ |
+| shows Deactivate Stake button for active state | ✅ |
+| does not show Deactivate Stake button for deactivating state | ✅ |
+| does not show Deactivate Stake button for inactive state | ✅ |
+| calls createHandleDeactivate with correct args when modal is visible | ✅ |
+| shows close button | ✅ |
+| sets the selected account and opens modal when called | ✅ |
+| works with a deactivating account | ✅ |
+
+### MWA/Solana Complexities Handled
+- **ESM import chain avoidance:** `StakeManagerModal` imports `PortfolioDashboard` for `STAKE_STATE_LABELS`/`getStakeStateColor`. PortfolioDashboard imports `useGetStakeAccounts` which imports `@solana-program/stake` → `@solana/kit` (ESM `.mjs`). In tests, we mock `PortfolioDashboard` to inline the same labels/colors, breaking the ESM chain. The real component handles this fine at runtime (Metro bundles ESM).
+- **RNTL Pressability constraint (again):** `fireEvent.press()` cannot trigger `Pressable.onPress` in RNTL. The `createHandleSelectStakeAccount` pure factory avoids fighting the framework — tested as a plain function call with mock state setters.
+
+### Test Baseline (109 tests, 19 suites)
+Post-implementation: 109 tests, 19 suites, all GREEN.

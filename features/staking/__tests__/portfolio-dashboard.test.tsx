@@ -58,12 +58,23 @@ jest.mock('@/features/staking/use-get-stake-accounts', () => ({
   useGetStakeAccounts: (args: any) => mockUseGetStakeAccounts(args),
 }))
 
+const mockStakeManagerModal = jest.fn()
+
+jest.mock('@/components/account/StakeManagerModal', () => ({
+  StakeManagerModal: (props: any) => mockStakeManagerModal(props),
+}))
+
 jest.mock('@/hooks/use-color-scheme', () => ({
   useColorScheme: () => 'light',
 }))
 
 // Dynamic import after mocks
-import { PortfolioDashboard, getStakeStateColor, STAKE_STATE_LABELS } from '../PortfolioDashboard'
+import {
+  PortfolioDashboard,
+  getStakeStateColor,
+  STAKE_STATE_LABELS,
+  createHandleSelectStakeAccount,
+} from '../PortfolioDashboard'
 import type { StakeAccountInfo } from '../use-get-stake-accounts'
 
 // ---------------------------------------------------------------------------
@@ -106,6 +117,47 @@ describe('STAKE_STATE_LABELS', () => {
     expect(STAKE_STATE_LABELS.activating).toBe('Activating')
     expect(STAKE_STATE_LABELS.deactivating).toBe('Deactivating')
     expect(STAKE_STATE_LABELS.inactive).toBe('Inactive')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 1b. createHandleSelectStakeAccount pure factory tests
+// ---------------------------------------------------------------------------
+describe('createHandleSelectStakeAccount', () => {
+  it('sets the selected account and opens modal when called', () => {
+    const setSelected = jest.fn()
+    const setVisible = jest.fn()
+    const account = mockStakeAccounts[0]
+
+    const handler = createHandleSelectStakeAccount(
+      account,
+      setSelected,
+      setVisible,
+    )
+
+    handler()
+
+    expect(setSelected).toHaveBeenCalledTimes(1)
+    expect(setSelected).toHaveBeenCalledWith(account)
+    expect(setVisible).toHaveBeenCalledTimes(1)
+    expect(setVisible).toHaveBeenCalledWith(true)
+  })
+
+  it('works with a deactivating account', () => {
+    const setSelected = jest.fn()
+    const setVisible = jest.fn()
+    const account = mockStakeAccounts[2] // deactivating
+
+    const handler = createHandleSelectStakeAccount(
+      account,
+      setSelected,
+      setVisible,
+    )
+
+    handler()
+
+    expect(setSelected).toHaveBeenCalledWith(account)
+    expect(setVisible).toHaveBeenCalledWith(true)
   })
 })
 
