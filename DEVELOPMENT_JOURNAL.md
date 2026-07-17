@@ -365,3 +365,38 @@ Post-implementation: 68 tests, 15 suites, all GREEN.
 
 ### Test Baseline (82 tests, 16 suites)
 Post-implementation: 82 tests, 16 suites, all GREEN.
+
+---
+
+## 2026-07-17 — Phase 6: Lifecycle Management — Deactivation Transaction
+
+### Architectural Decisions
+- **Pure factory function:** `createHandleDeactivate(stakeAccountPubkey, authorizedPubkey, sendTransaction)` in `features/staking/deactivate-stake.ts`. Same pattern as Phase 4's `createHandleStake` — pure logic extraction with dependency injection for MWA's `sendTransaction`.
+- **Single instruction:** Deactivation only requires one instruction (`getDeactivateInstruction` from `@solana-program/stake`), unlike the 3-instruction delegation flow. No keypair generation needed — the existing stake account is modified directly.
+- **Input validation order:** 1) `stakeAccountPubkey` must be non-empty, 2) `authorizedPubkey` must be non-empty (wallet connected), 3) `sendTransaction` must be available. All validation runs before any `@solana/kit` or `@solana-program/stake` calls.
+- **Instruction builder signature:** `getDeactivateInstruction` expects `{ stake: Address, stakeAuthority: TransactionSigner }`. The factory wraps `authorizedPubkey` in a `{ address }` object to satisfy the `TransactionSigner` interface shape. `clockSysvar` defaults to the sysvar address automatically.
+
+### What Was Tested (9 tests, 1 new suite)
+| Suite | Tests | Status |
+|-------|-------|--------|
+| `createHandleDeactivate` | 9 | ✅ |
+
+| Test | Status |
+|------|--------|
+| shows error alert when stakeAccountPubkey is undefined | ✅ |
+| shows error alert when authorizedPubkey is undefined | ✅ |
+| shows error alert when sendTransaction is undefined | ✅ |
+| builds deactivate instruction and sends transaction | ✅ |
+| shows success alert with transaction signature | ✅ |
+| shows error alert on transaction failure | ✅ |
+| shows error alert when stakeAccountPubkey is an empty string | ✅ |
+| shows error alert when authorizedPubkey is an empty string | ✅ |
+| does not call sendTransaction if getDeactivateInstruction throws | ✅ |
+
+### MWA/Solana Complexities Handled
+- **`TransactionSigner` shape:** Unlike `generateKeyPairSigner()` which returns `{ address, keyPair }`, the real MWA signer provides an object with `.address`. The factory passes `{ address: authorizedPubkey }` to satisfy the `TransactionSigner` interface in tests.
+- **`getDeactivateInstruction` API:** Accepts `stake: Address` and `stakeAuthority: TransactionSigner` with optional `clockSysvar`. The test verifies the instruction is built with `expect.objectContaining({ stake, stakeAuthority: { address } })` pattern.
+- **Error isolation:** If `getDeactivateInstruction` throws (invalid stake account), `sendTransaction` must not be called. This is covered by the final edge-case test.
+
+### Test Baseline (91 tests, 17 suites)
+Post-implementation: 91 tests, 17 suites, all GREEN.

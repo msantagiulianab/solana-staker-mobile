@@ -13,6 +13,7 @@ An Android-targeted Solana mobile wallet dApp built with Expo, React Native, `@s
 - ✅ Staking list: filtered (commission < 100%) & sorted (fee ascending + stake descending)
 - ✅ Stake SOL via Mobile Wallet Adapter (create stake account → initialize → delegate, 3-instruction transaction)
 - ✅ Portfolio Dashboard: `useGetStakeAccounts` hook fetches + decodes all user stake accounts with state derivation (active/activating/deactivating/inactive)
+- ✅ Deactivation Transaction: `createHandleDeactivate` pure factory builds + sends deactivate via MWA
 - ⬜ Request devnet/testnet airdrops (hook ready, screen pending)
 - ⬜ Send SOL (hook ready, screen pending)
 - ⬜ Receive SOL (QR code + address)
@@ -60,7 +61,8 @@ The app uses `@wallet-ui/react-native-kit` which wraps `@solana/kit` v2 and impl
 | `Staking page` | 1 | ✅ PASS |
 | `useGetStakeAccounts` hook | 7 | ✅ PASS |
 | `PortfolioDashboard` component | 14 | ✅ PASS |
-| **Total** | **82** | **✅ ALL PASSING** |
+| `createHandleDeactivate` factory | 9 | ✅ PASS |
+| **Total** | **91** | **✅ ALL PASSING** |
 
 ## Setup
 
