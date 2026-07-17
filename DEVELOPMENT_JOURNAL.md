@@ -452,3 +452,50 @@ Post-implementation: 91 tests, 17 suites, all GREEN.
 
 ### Test Baseline (109 tests, 19 suites)
 Post-implementation: 109 tests, 19 suites, all GREEN.
+
+---
+
+## 2026-07-17 — Phase 6 Completion: StakeManagerModal UI + Ed25519 Environment Polyfill
+
+### Architectural Decisions
+- **StakeManagerModal component:** Finalized in `components/account/StakeManagerModal.tsx` using React Native `Modal` with `transparent` background and `animationType="slide"`. The modal provides a detailed view of an individual stake account (Address, Status badge with color, Delegated amount in SOL, Validator vote pubkey) and a conditional "Deactivate Stake" button wired to `createHandleDeactivate()` from Phase 6.
+- **Pure helpers exported for direct testing:**
+  - `showDeactivateButton(state: StakeState)` — Returns `true` only for `'active'` and `'activating'`; prevents deactivation attempts on already-deactivating or inactive accounts.
+  - `createHandleSelectStakeAccount(account, setSelectedAccount, setModalVisible)` — Pure factory for the tap-to-open handler in PortfolioDashboard. Follows the established pure-logic-extraction pattern to bypass RNTL Pressability constraints.
+- **Polyfill chain completion:** Added `@solana/webcrypto-ed25519-polyfill` as step 5 in `polyfill.js` — loaded AFTER `react-native-quick-crypto` so `crypto.subtle` already exists. This polyfill patches `SubtleCrypto` with Ed25519 `generateKey`/`sign`/`verify` support, which is required by `@solana/kit`'s `generateKeyPairSigner()` in the staking transaction flow (Phase 4). Without this polyfill, `generateKeyPairSigner()` throws at runtime because Hermes' native `crypto.subtle` lacks Ed25519 support.
+
+### Polyfill Load Order (Critical)
+```
+1. react-native-get-random-values      → crypto.getRandomValues
+2. react-native-url-polyfill/auto      → URL / URLSearchParams
+3. buffer                              → global.Buffer
+4. react-native-quick-crypto           → crypto.subtle (install())
+5. @solana/webcrypto-ed25519-polyfill  → Ed25519 generateKey/sign/verify
+```
+Any deviation from this order causes silent runtime failures. The ed25519 polyfill MUST come after quick-crypto because it extends the `crypto.subtle` object that `install()` creates.
+
+### MWA/Solana Complexities Handled
+- **ESM import chain isolation in tests:** `StakeManagerModal` imports from `PortfolioDashboard` (for `STAKE_STATE_LABELS`/`getStakeStateColor`), which transitively imports `@solana/kit` (ESM `.mjs`). Tests mock `PortfolioDashboard` to inline labels/colors, breaking the ESM chain while the real component resolves fine via Metro bundling.
+- **`@solana/webcrypto-ed25519-polyfill` in test environment:** The package is ESM-native and cannot be loaded in Jest's Node environment. Tests that exercise `generateKeyPairSigner()` mock the function entirely, so the polyfill is irrelevant to the test suite.
+- **Deactivation button visibility logic:** `showDeactivateButton('deactivating')` returns `false` — a stake account already in the deactivation queue should not present a second deactivation option. Similarly, `'inactive'` accounts (never activated or fully withdrawn) have nothing to deactivate.
+
+### Test Baseline (109 tests, 19 suites)
+Final Phase 6 milestone: 109 tests, 19 suites, all GREEN.
+
+### Implemented Features Summary
+- ✅ Connect/disconnect mobile wallet (MWA)
+- ✅ SOL balance display
+- ✅ Token accounts listing (Token + Token-2022)
+- ✅ Validator discovery via `getVoteAccounts` (filtered: excludes 100% commission, sorted: lowest commission first)
+- ✅ ValidatorCard component (ellipsified pubkey, commission display, interactive touchable)
+- ✅ Dynamic route `[votePubkey]` for per-validator staking
+- ✅ On-chain stake delegation transaction (3-instruction flow: create + initialize + delegate)
+- ✅ Stake account discovery via `getProgramAccounts` with binary `StakeStateV2` decoding
+- ✅ PortfolioDashboard with state-aware color badges (active/activating/deactivating/inactive)
+- ✅ Deactivation transaction (single-instruction: `getDeactivateInstruction`)
+- ✅ StakeManagerModal (tap-to-open from PortfolioDashboard, conditional deactivate button)
+- ✅ Ed25519 environment polyfill for Hermes runtime
+- ✅ Tab navigation (Account, Staking, Settings, Demo)
+- ✅ Sign-in screen with auth guard routing
+- ✅ Light/dark theme support
+- ✅ 109 passing tests across 19 suites

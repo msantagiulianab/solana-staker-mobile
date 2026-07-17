@@ -19,3 +19,8 @@ global.Buffer = global.Buffer || Buffer
 // 4. Quick crypto (provides crypto.subtle and hash functions)
 import { install } from 'react-native-quick-crypto'
 install()
+
+// 5. Ed25519 key generation polyfill (required by @solana/kit's generateKeyPairSigner)
+//    Must load AFTER react-native-quick-crypto so crypto.subtle exists.
+//    Patches SubtleCrypto with Ed25519 generateKey/sign/verify support.
+import '@solana/webcrypto-ed25519-polyfill'
