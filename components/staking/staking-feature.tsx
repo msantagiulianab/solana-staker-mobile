@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import { FlatList, StyleSheet } from 'react-native'
+import { ScrollView, StyleSheet } from 'react-native'
 import { useRouter } from 'expo-router'
 import { AppView } from '@/components/ui/app-view'
 import { AppText } from '@/components/ui/app-text'
@@ -43,18 +43,19 @@ export function StakingFeature() {
   return (
     <AppView style={styles.card}>
       <AppText type="subtitle">Staking</AppText>
-      <FlatList
+      <ScrollView
         testID="validator-list"
-        data={filteredSortedValidators}
-        keyExtractor={(item) => item.votePubkey}
-        renderItem={({ item }) => (
+        nestedScrollEnabled={true}
+      >
+        {filteredSortedValidators.map((item) => (
           <ValidatorCard
+            key={item.votePubkey}
             votePubkey={item.votePubkey}
             commission={item.commission}
             onPress={() => router.push(`/staking/${String(item.votePubkey)}`)}
           />
-        )}
-      />
+        ))}
+      </ScrollView>
     </AppView>
   )
 }
