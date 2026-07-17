@@ -5,6 +5,7 @@
 //   2. URL / URLSearchParams → provided by react-native-url-polyfill
 //   3. Buffer → polyfilled from the 'buffer' package
 //   4. crypto (for hash functions) → provided by react-native-quick-crypto
+//   5. Ed25519 Web Crypto support → provided by @solana/webcrypto-ed25519-polyfill
 
 // 1. getRandomValues (before anything that touches crypto)
 import 'react-native-get-random-values'
@@ -22,5 +23,8 @@ install()
 
 // 5. Ed25519 key generation polyfill (required by @solana/kit's generateKeyPairSigner)
 //    Must load AFTER react-native-quick-crypto so crypto.subtle exists.
-//    Patches SubtleCrypto with Ed25519 generateKey/sign/verify support.
-import '@solana/webcrypto-ed25519-polyfill'
+//    The package exports an install() function that patches SubtleCrypto.prototype
+//    with Ed25519 generateKey/sign/verify support. A bare import does NOT patch
+//    crypto.subtle — install() MUST be explicitly called.
+import { install as installEd25519 } from '@solana/webcrypto-ed25519-polyfill'
+installEd25519()
