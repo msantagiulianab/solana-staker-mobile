@@ -273,3 +273,50 @@ Post-implementation: 55 tests, 14 suites, all GREEN.
 
 ### Test Baseline (65 tests, 14 suites)
 Post-implementation: 65 tests, 14 suites, all GREEN.
+
+---
+
+## 2026-07-16 — Phase 5: Portfolio Dashboard — useGetStakeAccounts Hook
+
+### Architectural Decisions
+- **Hook location:** `features/staking/use-get-stake-accounts.ts` — following the same pattern as `use-get-validators.ts` in the same directory.
+- **RPC methods used:**
+  - `client.rpc.getProgramAccounts(STAKE_PROGRAM_ADDRESS, { encoding: 'base64' })` to fetch all stake accounts owned by the Stake program.
+  - `client.rpc.getEpochInfo()` to get the current epoch for state derivation.
+- **Decoding:** Uses `decodeAccount` from `@solana/kit` with `getStakeStateAccountDecoder()` from `@solana-program/stake` to parse the binary `StakeStateV2` data.
+- **State derivation:** Pure function `deriveStakeState(stakeStateV2, currentEpoch)` returns `'active' | 'activating' | 'deactivating' | 'inactive'` based on:
+  - `deactivationEpoch <= currentEpoch` → `'deactivating'`
+  - `activationEpoch > currentEpoch` → `'activating'`
+  - `activationEpoch <= currentEpoch && deactivationEpoch === U64_MAX` → `'active'`
+  - Any non-Stake variant → `'inactive'`
+- **Return type:** `StakeAccountInfo` — `{ pubkey, lamports, state, voterPubkey?, delegatedAmount? }`.
+- **Query key:** `['get-stake-accounts', chain, address]` — consistent with existing pattern.
+
+### Jest Mock Strategy
+- **`@solana/kit` mocked entirely:** The module's `.mjs` ESM entry-point cannot be parsed by Jest. `decodeAccount` is replaced with a pure function that returns pre-built `StakeStateV2` shapes keyed by pubkey — no real binary decoding needed at test time.
+- **`@solana-program/stake` mocked:** `STAKE_PROGRAM_ADDRESS` exported as string literal; `getStakeStateAccountDecoder` returns a dummy decoder (never actually used since `decodeAccount` is mocked above).
+- **All mock data generation inline:** Factory functions for state maps, account info objects, and `makeMeta`/`makeStakeFields` helpers are all defined INSIDE the `jest.mock()` factory callbacks to avoid out-of-scope variable references (Jest hoisting constraint).
+- **`jest.config.js` updated:** Added `@solana-program/.*` to `transformIgnorePatterns` (in addition to existing `@solana/.*`) to allow Jest to transform the CJS build of `@solana-program/stake` when the real module is needed.
+
+### What Was Tested (7 tests, 1 new suite)
+| Suite | Tests | Status |
+|-------|-------|--------|
+| `useGetStakeAccounts` hook | 7 | ✅ |
+
+| Test | Status |
+|------|--------|
+| calls getProgramAccounts with the Stake program address | ✅ |
+| fetches the current epoch | ✅ |
+| returns parsed stake accounts with pubkey, lamports, and state | ✅ |
+| marks deactivating stake when deactivationEpoch < current epoch | ✅ |
+| surfaces error when epoch fetch fails | ✅ |
+| returns empty array when no accounts are returned | ✅ |
+| uses the correct queryKey with chain and address | ✅ |
+
+### MWA/Solana Complexities Handled
+- **`@solana/kit` v2 branded types:** `decodeAccount` expects `Lamports`, `Address`, and other branded nominal types. The hook uses `as any` on the encoded object to bypass type-checking at the boundary — at runtime these are plain `bigint`/`string` values.
+- **`getProgramAccounts` return shape:** The @solana/kit v2 API returns a branded `SolanaRpcResponse<...>` wrapper with `.context` and `.value` when filters are used, but a plain array when no `withContext` is set. The hook casts through `as unknown` to access the value array directly.
+- **`voterPubkey` branded type:** `stake.delegation.voterPubkey` is `Address` (branded). The hook coerces via `as unknown as string` for the public API surface.
+
+### Test Baseline (68 tests, 15 suites)
+Post-implementation: 68 tests, 15 suites, all GREEN.

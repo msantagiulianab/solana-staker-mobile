@@ -12,6 +12,7 @@ An Android-targeted Solana mobile wallet dApp built with Expo, React Native, `@s
 - ✅ Staking with interactive ValidatorCard UI → tap to navigate to per-validator stake screen (dynamic route with SOL amount input + Stake button)
 - ✅ Staking list: filtered (commission < 100%) & sorted (fee ascending + stake descending)
 - ✅ Stake SOL via Mobile Wallet Adapter (create stake account → initialize → delegate, 3-instruction transaction)
+- ✅ Portfolio Dashboard: `useGetStakeAccounts` hook fetches + decodes all user stake accounts with state derivation (active/activating/deactivating/inactive)
 - ⬜ Request devnet/testnet airdrops (hook ready, screen pending)
 - ⬜ Send SOL (hook ready, screen pending)
 - ⬜ Receive SOL (QR code + address)
@@ -57,7 +58,8 @@ The app uses `@wallet-ui/react-native-kit` which wraps `@solana/kit` v2 and impl
 | `RootLayout` auth guard routing | 5 | ✅ PASS |
 | `Tab layout` | 1 | ✅ PASS |
 | `Staking page` | 1 | ✅ PASS |
-| **Total** | **65** | **✅ ALL PASSING** |
+| `useGetStakeAccounts` hook | 7 | ✅ PASS |
+| **Total** | **68** | **✅ ALL PASSING** |
 
 ## Setup
 
@@ -98,12 +100,14 @@ npm run android
 │   │   ├── wallet-ui-button-connect.tsx
 │   │   ├── use-wallet-ui-theme.ts # Theme colors for wallet components
 │   │   └── __tests__/
-│   ├── staking/                  # Staking feature with validator FlatList
+│   ├── staking/                  # Staking feature with validator FlatList + on-chain delegation
 │   │   ├── staking-feature.tsx
+│   │   ├── validator-card.tsx
 │   │   └── __tests__/
 ├── features/                     # Data-access hooks + feature screens
 │   ├── staking/
-│   │   ├── use-get-validators.ts # react-query hook: getVoteAccounts → current[]
+│   │   ├── use-get-validators.ts        # react-query hook: getVoteAccounts → current[]
+│   │   ├── use-get-stake-accounts.ts    # react-query hook: getProgramAccounts + stake state derivation
 │   │   └── __tests__/
 │   ├── network/                  # Network provider + hooks
 │   │   ├── network-provider.tsx  # ClusterProvider (React Context)
