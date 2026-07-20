@@ -499,3 +499,24 @@ Final Phase 6 milestone: 109 tests, 19 suites, all GREEN.
 - ✅ Sign-in screen with auth guard routing
 - ✅ Light/dark theme support
 - ✅ 109 passing tests across 19 suites
+
+---
+
+## 2026-07-20 — MWA Connection Pipeline Fixes: Background Timeout & Handshake Promise
+
+### Architectural Decisions
+- **URI must be a real, fast-resolving HTTPS domain.** Phantom performs a background JSON-RPC socket verification against `AppIdentity.uri` with a 30-second timeout. Custom deep-link schemes (e.g., `solanastaker://app`) and non-resolving domains (e.g., `solana-staker-mobile.com`) cause the socket to hang for the full 30 seconds and time out silently — Phantom never presents the connection prompt. Using `https://example.com` (a real, instant-resolving domain) prevents this timeout.
+- **Must `await connect()` in the connection callback.** `useMobileWallet().connect()` returns a promise that suspends until Phantom completes its authorization handshake and delivers the return intent via Android's intent system. Firing `connect()` without `await` discards the promise and prevents the app from receiving the authorized account payload.
+- **Never route away before `connect()` resolves.** Premature navigation (e.g., `router.replace()` inside a `setTimeout` before the promise settles) unmounts the component holding the MWA promise listener, severing the Android intent-receiving pipeline. Navigation must only occur after `await connect()` completes successfully.
+
+### MWA/Solana Complexities Handled
+- **30-second background socket timeout:** Phantom opens a JSON-RPC socket to the `AppIdentity.uri` domain to verify the requesting app's identity. If the domain doesn't resolve, the socket hangs for the full 30 seconds. The fix: set `uri` to `https://example.com` — a real, fast-resolving domain that completes Phantom's verification instantly.
+- **JS thread pausing / Android lifecycle:** When `connect()` fires, MWA launches an Android intent that opens Phantom, pausing the React Native app (JS thread suspended). When the user approves/rejects, a return intent resumes the app and the suspended `await connect()` promise resolves with the wallet's payload. The promise must remain alive (component mounted, no navigation away) throughout this entire lifecycle window.
+- **`setTimeout` anti-pattern:** Using `setTimeout` to force navigation before `connect()` resolves severs the MWA promise listener. The `account` state never updates because the component holding the listener is unmounted by the premature navigation. The correct pattern is to wait for `await connect()` and only navigate after the promise settles.
+
+### Fixes Applied
+- `constants/app-config.ts`: Changed `uri` from `'solanastaker://app'` → `'https://solana-staker-mobile.com'` → `'https://example.com'` (final, fast-resolving domain). Also corrected `name` from `'solana-mobile-staker'` to `'solana-staker-mobile'`.
+- `features/account/account-feature-connect.tsx`: Removed `setTimeout` hack, added `useCallback` + `useRouter`, now properly `await`s `connect()` before executing `router.replace('/staking')`.
+
+### Test Baseline
+No test regressions — the MWA connection layer is runtime behavior that cannot be unit-tested (Phantom's external process). The pure function extraction pattern for all other staking/wallet logic remains intact.

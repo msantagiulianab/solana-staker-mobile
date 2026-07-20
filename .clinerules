@@ -56,3 +56,9 @@ Immediately upon achieving a GREEN test suite for a feature, execute these three
 1. **Journal:** Append to `DEVELOPMENT_JOURNAL.md` — date, architectural decisions, tests added, MWA/Solana complexities handled.
 2. **Document:** Update `README.md` — feature list, test count.
 3. **Commit:** `git add . && git commit -m "type(scope): description"` using the commit convention above.
+
+# MWA Connection Pipeline (Do Not Break The Handshake)
+1. **`AppIdentity.uri` must be a real, fast-resolving HTTPS domain.** Phantom performs a background JSON-RPC socket verification against this domain with a 30-second timeout. Use `https://example.com` during development. Never use custom deep-link schemes (e.g., `solanastaker://app`) or non-resolving domains — they cause silent connection failures because Phantom's verification handshake hangs and times out.
+2. **Always `await connect()` in the connection callback.** The `useMobileWallet().connect()` function returns a promise that suspends until Phantom finishes its authorization flow and delivers the return intent via Android's intent system. Do NOT fire `connect()` without `await` — this discards the promise and prevents the app from receiving the authorized account payload.
+3. **Never route away from the connection screen before `connect()` resolves.** Premature navigation (e.g., `router.replace()` inside a `setTimeout` before the promise settles) unmounts the component holding the MWA listener, severing the intent-receiving pipeline. Route only after `await connect()` completes successfully, so the app is still listening when Phantom returns the authorization result.
+4. **Never use `setTimeout` or manual delays to work around a hanging `connect()`.** A hanging `connect()` indicates a Phantom verification timeout (see rule #1) or an Android intent delivery failure. Fix the root cause (the URI domain or intent filter configuration) rather than papering over the symptom with a timer.

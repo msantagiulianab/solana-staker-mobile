@@ -4,7 +4,7 @@ An Android-targeted Solana mobile wallet dApp built with Expo, React Native, `@s
 
 ## Features
 
-- ✅ Connect/disconnect mobile wallet (Mobile Wallet Adapter)
+- ✅ Connect/disconnect mobile wallet (Mobile Wallet Adapter) — native connection pipeline with 30-second background timeout mitigation
 - ✅ View SOL balance and SPL token accounts (Token + Token-2022)
 - ✅ Switch between Solana clusters (Devnet, Testnet)
 - ✅ Sign arbitrary messages (Demo tab)
