@@ -15,6 +15,8 @@ An Android-targeted Solana mobile wallet dApp built with Expo, React Native, `@s
 - ✅ Portfolio Dashboard: `useGetStakeAccounts` hook fetches + decodes all user stake accounts with state derivation (active/activating/deactivating/inactive)
 - ✅ Deactivation Transaction: `createHandleDeactivate` pure factory builds + sends deactivate via MWA
 - ✅ StakeManagerModal: tap-to-open from portfolio → view stake details + Deactivate Stake button (active/activating only)
+- ✅ Portfolio Dashboard wired into Account tab (displayed alongside balance + staking + tokens)
+- ✅ Real pull-to-refresh (invalidates react-query cache for balance + tokens)
 - ⬜ Request devnet/testnet airdrops (hook ready, screen pending)
 - ⬜ Send SOL (hook ready, screen pending)
 - ⬜ Receive SOL (QR code + address)
@@ -66,7 +68,8 @@ The app uses `@wallet-ui/react-native-kit` which wraps `@solana/kit` v2 and impl
 | `showDeactivateButton` pure helper | 4 | ✅ PASS |
 | `StakeManagerModal` component | 12 | ✅ PASS |
 | `createHandleSelectStakeAccount` factory | 2 | ✅ PASS |
-| **Total** | **109** | **✅ ALL PASSING** |
+| `AccountFeature` component | 11 | ✅ PASS |
+| **Total** | **120** | **✅ ALL PASSING** |
 
 ## Setup
 
@@ -91,7 +94,7 @@ npm run android
 │       └── demo/index.tsx         # DemoFeature (sign message)
 ├── components/
 │   ├── account/                  # Account feature + hooks
-│   │   ├── account-feature.tsx   # Main account screen (balance, tokens, staking)
+│   │   ├── account-feature.tsx   # Main account screen (balance, tokens, staking, portfolio)
 │   │   ├── account-ui-balance.tsx # SOL balance display
 │   │   ├── use-get-balance.ts    # react-query SOL balance hook
 │   │   ├── use-get-token-accounts.ts # Token + Token-2022 account hook
@@ -129,12 +132,6 @@ npm run android
 │   ├── app-config.ts             # App identity + Solana cluster definitions
 │   ├── app-styles.ts             # Shared styles
 │   └── colors.ts                 # Light/dark color palette
-├── features/                     # Existing network feature code from template
-│   └── network/
-│       ├── network-provider.tsx  # ClusterProvider (React Context)
-│       ├── network-ui-select.tsx # Cluster dropdown selector
-│       ├── use-network.tsx       # useNetwork() hook
-│       └── ...
 ├── hooks/
 │   ├── use-color-scheme.ts       # Normalizes light/dark/unspecified
 │   └── use-theme-color.ts        # Resolves theme-aware colors with overrides
