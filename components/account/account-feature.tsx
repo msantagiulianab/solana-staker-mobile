@@ -8,7 +8,6 @@ import { useGetBalance } from '@/components/account/use-get-balance'
 import { useGetTokenAccounts } from '@/components/account/use-get-token-accounts'
 import { useMobileWallet } from '@wallet-ui/react-native-kit'
 import { ellipsify } from '@/utils/ellipsify'
-import { StakingFeature } from '@/components/staking/staking-feature'
 import { PortfolioDashboard } from '@/features/staking/PortfolioDashboard'
 import { WalletUiButtonConnect } from '@/components/solana/wallet-ui-button-connect'
 import type { Address } from '@solana/kit'
@@ -54,7 +53,6 @@ function AccountFeatureConnected({ address }: { address: string }) {
       <AppView style={styles.card}>
         <AppText type="subtitle">Actions</AppText>
       </AppView>
-      <StakingFeature />
       <PortfolioDashboard address={address as Address} />
       {tokenAccounts && tokenAccounts.length > 0 ? (
         <AppView style={styles.card}>

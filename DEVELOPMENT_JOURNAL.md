@@ -520,3 +520,21 @@ Final Phase 6 milestone: 109 tests, 19 suites, all GREEN.
 
 ### Test Baseline
 No test regressions — the MWA connection layer is runtime behavior that cannot be unit-tested (Phantom's external process). The pure function extraction pattern for all other staking/wallet logic remains intact.
+
+---
+
+## 2026-07-20 — Phase 7: Circular Dependency Break & Layout Cleanup
+
+### Architectural Decisions
+- **Extracted shared staking types into `features/staking/staking-types.ts`.** `PortfolioDashboard` and `StakeManagerModal` had a circular import: `PortfolioDashboard` → imports `StakeManagerModal`, `StakeManagerModal` → imports `STAKE_STATE_LABELS` and `getStakeStateColor` from `PortfolioDashboard`. The shared symbols (`STAKE_STATE_LABELS`, `getStakeStateColor` + underlying `STAKE_STATE_COLORS`) were extracted into a standalone `staking-types.ts` file. Both components now import from `staking-types.ts`, breaking the cycle.
+- **`PortfolioDashboard` re-exports `STAKE_STATE_LABELS` and `getStakeStateColor`** for backward compatibility with existing importers (including tests).
+- **Removed `StakingFeature` rendering from Account tab.** The Account tab was stacking both `StakingFeature` (validator list) and `PortfolioDashboard` (stake accounts). The `StakingFeature` was cleaned out so the Account tab renders a clean portfolio + balance + tokens view. The validator list remains accessible on the dedicated Staking tab.
+
+### MWA/Solana Complexities Handled
+- Circular imports in RN/Expo cause silent module resolution failures that can freeze the entire Metro bundler and crash the app at startup. Extracting shared types to a leaf module is the canonical fix.
+- Redundant component stacking (`StakingFeature` + `PortfolioDashboard`) was causing unnecessary re-renders and network calls, slowing wallet session restore.
+
+### Test Baseline
+- 19 suites, 119 tests passing (down 1 from 120 due to removal of `StakingFeature` assertion from Account tab test — the component no longer renders there, and the assertion was correctly removed).
+- `StakeManagerModal.test.tsx`: mock path updated from `@/features/staking/PortfolioDashboard` → `@/features/staking/staking-types`.
+- `account-feature.test.tsx`: removed `StakingFeature` mock and assertion, kept `PortfolioDashboard` mock.

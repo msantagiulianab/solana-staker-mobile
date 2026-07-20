@@ -36,15 +36,6 @@ jest.mock('@/components/account/use-get-token-accounts', () => ({
   useGetTokenAccounts: (args: any) => mockUseGetTokenAccounts(args),
 }))
 
-// Mock StakingFeature with a testID-identifiable wrapper
-jest.mock('@/components/staking/staking-feature', () => {
-  const React = require('react')
-  const MockStakingFeature = () =>
-    React.createElement('View', { testID: 'staking-feature-mock' }, null)
-  MockStakingFeature.displayName = 'StakingFeature'
-  return { StakingFeature: MockStakingFeature }
-})
-
 // Mock PortfolioDashboard with a testID-identifiable wrapper
 jest.mock('@/features/staking/PortfolioDashboard', () => {
   const React = require('react')
@@ -143,12 +134,6 @@ describe('AccountFeature — connected', () => {
 
     // Address is passed through ellipsify: 4+4 chars with ".." separator
     expect(getByText('Depl..1111')).toBeTruthy()
-  })
-
-  it('renders the staking feature component', async () => {
-    const { getByTestId } = await render(<AccountFeature />)
-
-    expect(getByTestId('staking-feature-mock')).toBeTruthy()
   })
 
   it('renders the portfolio dashboard', async () => {

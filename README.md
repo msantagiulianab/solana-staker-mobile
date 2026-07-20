@@ -69,14 +69,42 @@ The app uses `@wallet-ui/react-native-kit` which wraps `@solana/kit` v2 and impl
 | `StakeManagerModal` component | 12 | ✅ PASS |
 | `createHandleSelectStakeAccount` factory | 2 | ✅ PASS |
 | `AccountFeature` component | 11 | ✅ PASS |
-| **Total** | **120** | **✅ ALL PASSING** |
+| **Total** | **119** | **✅ ALL PASSING** |
 
 ## Setup
 
 ```bash
 npm install
 npm test
-npm run android
+```
+
+## Running the App
+
+### 1. Install the Development Build
+
+Download the latest development APK from:
+
+- **EAS Build dashboard:** [solana-staker-mobile builds](https://expo.dev/accounts/michelesantagiuliana/projects/solana-staker-mobile/builds) (requires Expo account)
+- **GitHub Releases (auto-build):** Push a `v*` tag → GitHub Actions builds via EAS and attaches the APK to a release at `https://github.com/msantagiulianab/solana-staker-mobile/releases`
+
+Alternatively, build locally: `npm run android` (requires Android Studio + SDK).
+
+### 2. Start the Dev Server
+
+Once the development build is installed on your Android device:
+
+```bash
+npm run dev:tunnel
+```
+
+Scan the QR code from the installed development build app. The deep-link scheme (`solanastakermobile`) is configured in `app.json`.
+
+### USB Debugging
+
+For wired development with a USB-connected device:
+
+```bash
+npm run dev
 ```
 
 ## Project Structure
@@ -114,11 +142,20 @@ npm run android
 │   │   ├── staking-feature.tsx
 │   │   ├── validator-card.tsx
 │   │   └── __tests__/
+│   ├── account/                  # Account management
+│   │   ├── account-feature.tsx   # Main account screen (balance, tokens, portfolio)
+│   │   ├── account-ui-balance.tsx # SOL balance display
+│   │   ├── StakeManagerModal.tsx  # Modal for individual stake account management
+│   │   ├── use-get-balance.ts    # react-query SOL balance hook
+│   │   ├── use-get-token-accounts.ts # Token + Token-2022 account hook
+│   │   └── __tests__/
 ├── features/                     # Data-access hooks + feature screens
 │   ├── staking/
 │   │   ├── use-get-validators.ts        # react-query hook: getVoteAccounts → current[]
 │   │   ├── use-get-stake-accounts.ts    # react-query hook: getProgramAccounts + stake state derivation
 │   │   ├── PortfolioDashboard.tsx       # UI component: FlatList of stake cards with state badges
+│   │   ├── staking-types.ts             # Shared types/labels/colors (breaks circular dependency)
+│   │   ├── deactivate-stake.ts          # Pure factory: createHandleDeactivate
 │   │   └── __tests__/
 │   ├── network/                  # Network provider + hooks
 │   │   ├── network-provider.tsx  # ClusterProvider (React Context)

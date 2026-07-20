@@ -1,0 +1,54 @@
+name: Build Android Development APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build Android APK via EAS
+        id: build
+        run: |
+          eas build \
+            --platform android \
+            --profile development \
+            --non-interactive \
+            --wait \
+            --clear-cache
+
+      - name: Download APK artifact
+        run: |
+          # Find the build ID from the build output
+          BUILD_ID=$(eas build:list --platform android --status FINISHED --limit 1 --json | jq -r '.[0].id')
+          eas build:view "$BUILD_ID" --json > build-info.json
+          BUILD_URL=$(jq -r '.artifacts.buildUrl' build-info.json)
+          curl -L -o solana-staker-mobile.apk "$BUILD_URL"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          files: solana-staker-mobile.apk
+          generate_release_notes: true

@@ -38,7 +38,7 @@ jest.mock('@/hooks/use-color-scheme', () => ({
   useColorScheme: () => 'light',
 }))
 
-jest.mock('@/features/staking/PortfolioDashboard', () => ({
+jest.mock('@/features/staking/staking-types', () => ({
   STAKE_STATE_LABELS: {
     active: 'Active',
     activating: 'Activating',

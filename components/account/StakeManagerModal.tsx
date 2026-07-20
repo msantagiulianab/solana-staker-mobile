@@ -32,7 +32,7 @@ import { lamportsToSol } from '@/utils/lamports-to-sol'
 import {
   STAKE_STATE_LABELS,
   getStakeStateColor,
-} from '@/features/staking/PortfolioDashboard'
+} from '@/features/staking/staking-types'
 import type { StakeAccountInfo } from '@/features/staking/use-get-stake-accounts'
 
 // ---------------------------------------------------------------------------

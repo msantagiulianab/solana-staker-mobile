@@ -9,29 +9,17 @@ import {
 import { StakeManagerModal } from '@/components/account/StakeManagerModal'
 import { ellipsify } from '@/utils/ellipsify'
 import { lamportsToSol } from '@/utils/lamports-to-sol'
+import {
+  STAKE_STATE_LABELS,
+  getStakeStateColor,
+} from '@/features/staking/staking-types'
 import type { Address } from '@solana/kit'
 
 // ---------------------------------------------------------------------------
-// Pure helpers (exported for direct testing)
+// Re-exports (for backward compatibility with existing importers)
 // ---------------------------------------------------------------------------
 
-export const STAKE_STATE_LABELS: Record<StakeAccountInfo['state'], string> = {
-  active: 'Active',
-  activating: 'Activating',
-  deactivating: 'Deactivating',
-  inactive: 'Inactive',
-}
-
-const STAKE_STATE_COLORS: Record<StakeAccountInfo['state'], string> = {
-  active: '#4CAF50',
-  activating: '#FF9800',
-  deactivating: '#F44336',
-  inactive: '#9E9E9E',
-}
-
-export function getStakeStateColor(state: StakeAccountInfo['state']): string {
-  return STAKE_STATE_COLORS[state]
-}
+export { STAKE_STATE_LABELS, getStakeStateColor }
 
 /**
  * Pure factory: creates a handler that, when called, selects a stake account
