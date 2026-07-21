@@ -104,16 +104,26 @@ export function useGetStakeAccounts({ address }: { address: Address }) {
 
   return useQuery({
     queryKey: ['get-stake-accounts', chain, address] as const,
+    // Strict enabling: never fire an unfiltered query when address is falsy.
+    // Without this, the hook downloads the entire network's stake registry on
+    // mount, causing an OOM crash on mobile.
+    enabled: !!address,
     queryFn: async () => {
       const [rawAccounts, epochInfo] = await Promise.all([
         client.rpc
           .getProgramAccounts(STAKE_PROGRAM_ADDRESS as Address, {
             encoding: 'base64',
-            // No filters: fetch all Stake accounts, we filter by staker
-            // authority later in the component if needed, or rely on RPC
-            // memcmp filter with offset.
-            // When the RPC wrapper is complex (branded types) we cast to
-            // access the raw value array.
+            // memcmp filter on authorized.withdrawer at byte offset 44.
+            // This restricts the RPC response to only the connected wallet's
+            // stake accounts instead of fetching the entire network registry.
+            filters: [
+              {
+                memcmp: {
+                  offset: 44n,
+                  bytes: address as string,
+                },
+              },
+            ],
           } as any)
           .send() as unknown as Array<{ pubkey: string; account: { lamports: number; data: [string, string]; owner: string; executable: boolean; rentEpoch: number; space: number } }>,
         client.rpc.getEpochInfo().send() as unknown as { epoch: bigint },

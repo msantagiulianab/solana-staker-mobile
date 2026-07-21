@@ -12,7 +12,7 @@ An Android-targeted Solana mobile wallet dApp built with Expo, React Native, `@s
 - ✅ Staking with interactive ValidatorCard UI → tap to navigate to per-validator stake screen (dynamic route with SOL amount input + Stake button)
 - ✅ Staking list: filtered (commission < 100%) & sorted (fee ascending + stake descending)
 - ✅ Stake SOL via Mobile Wallet Adapter (create stake account → initialize → delegate, 3-instruction transaction)
-- ✅ Portfolio Dashboard: `useGetStakeAccounts` hook fetches + decodes all user stake accounts with state derivation (active/activating/deactivating/inactive)
+- ✅ Portfolio Dashboard: `useGetStakeAccounts` hook fetches + decodes user stake accounts with `memcmp` authority filter and `enabled: !!address` guard — prevents OOM from scanning the entire network stake registry
 - ✅ Deactivation Transaction: `createHandleDeactivate` pure factory builds + sends deactivate via MWA
 - ✅ StakeManagerModal: tap-to-open from portfolio → view stake details + Deactivate Stake button (active/activating only)
 - ✅ Portfolio Dashboard wired into Account tab (displayed alongside balance + staking + tokens)

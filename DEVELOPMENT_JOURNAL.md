@@ -538,3 +538,26 @@ No test regressions — the MWA connection layer is runtime behavior that cannot
 - 19 suites, 119 tests passing (down 1 from 120 due to removal of `StakingFeature` assertion from Account tab test — the component no longer renders there, and the assertion was correctly removed).
 - `StakeManagerModal.test.tsx`: mock path updated from `@/features/staking/PortfolioDashboard` → `@/features/staking/staking-types`.
 - `account-feature.test.tsx`: removed `StakingFeature` mock and assertion, kept `PortfolioDashboard` mock.
+
+---
+
+## 2026-07-20 — Phase 8: OOM Prevention — Query Enabled Guard + memcmp Authority Filter
+
+### Architectural Decisions
+- **`enabled: !!address` guard on `useGetStakeAccounts`.** Without this flag, React Query fires the RPC call immediately on mount — even when `address` is `undefined` (wallet not yet connected). This causes `getProgramAccounts` to fetch the **entire network's stake registry** (thousands of accounts), consuming hundreds of MB and OOM-crashing the mobile process. The `enabled` flag ensures the query stays dormant until the wallet provides a real address.
+- **`memcmp` filter on `authorized.withdrawer` at byte offset 44.** In the Stake account layout, the `authorized.withdrawer` pubkey (32 bytes) starts at offset 44 (4 bytes of state enum + 40 bytes of `Authorized` struct header fields: 32-byte staker + 4-byte padding). The filter restricts the RPC response to only accounts where the withdrawer authority matches the user's wallet, changing the query from "download all ~2000 Solana stake accounts" to "return only the user's own stake accounts."
+- **`AccountFeature` `address` prop is verified correct.** Line 56 passes `address` (a real JS variable from `account.address`) with an `as Address` cast — not a literal string template. No fix needed on the prop-passing side.
+
+### MWA/Solana Complexities Handled
+- **`getProgramAccounts` without filters returns the entire stake registry.** On a public RPC endpoint, this can be thousands of accounts, each 200 bytes encoded. The mobile device's JS engine cannot handle this in a single fetch — it OOMs. The `memcmp` filter at offset 44 (withdrawer authority) is the minimum viable filter for stake account queries.
+- **Byte offset 44 calculation** for Stake V2 layout: `data` variant tag (4 bytes) + `meta.authorized.staker` (32 bytes) + `meta.authorized.withdrawer` starts here (32 bytes). The `bytes` field in the filter must be the base58-encoded wallet address.
+- **`enabled` flag on `useQuery` is critical in mobile contexts.** Unlike web apps where RPCs are cheap and servers powerful, mobile React Native apps share a single JS thread with the UI and have limited memory. An unfiltered `getProgramAccounts` can freeze the entire device.
+
+### Test Baseline
+- 19 suites, 119 tests, 0 failures — no regressions. The mock layer already intercepts `getProgramAccounts` and returns predefined test data regardless of filters, so the addition of `enabled` + `filters` has no impact on existing test assertions.
+- The `useGetStakeAccounts` hook test suite (7 tests) continues to pass: the `renderHook` call passes a real `MOCK_STAKER` address, so `enabled: !!address` evaluates to `true` and the query fires normally in tests.
+
+### Fixes Applied
+- `features/staking/use-get-stake-accounts.ts`: Added `enabled: !!address` (line 104) and `filters: [{ memcmp: { offset: 44n, bytes: address as string } }]` (lines 116-122).
+- `components/account/account-feature.tsx`: Verified line 56 passes real `address` variable — no change needed.
+- `README.md`: Updated Portfolio Dashboard feature description to mention memcmp filter and enabled guard.
