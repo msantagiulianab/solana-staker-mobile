@@ -1,6 +1,6 @@
 # solana-mobile-staker
 
-An Android-native Solana staking orchestration dApp and portfolio dashboard built with Expo, React Native, and `@solana/kit` v2.
+An Android-targeted React Native Solana staking orchestration dApp and portfolio dashboard built with Expo, React Native, and `@solana/kit` v2.
 
 The application integrates natively with external mobile wallet providers (such as Phantom) via the Mobile Wallet Adapter (MWA) protocol to securely delegate, track, and manage native Solana staking lifecycles without ever handling a user's private keys.
 
