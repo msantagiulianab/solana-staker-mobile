@@ -41,7 +41,7 @@ jobs:
       - name: Download APK artifact
         run: |
           # Find the build ID from the build output
-          BUILD_ID=$(eas build:list --platform android --status FINISHED --limit 1 --json | jq -r '.[0].id')
+          BUILD_ID=$(eas build:list --platform android --status FINISHED --limit 1 --json --non-interactive | jq -r '.[0].id')
           eas build:view "$BUILD_ID" --json > build-info.json
           BUILD_URL=$(jq -r '.artifacts.buildUrl' build-info.json)
           curl -L -o solana-staker-mobile.apk "$BUILD_URL"
