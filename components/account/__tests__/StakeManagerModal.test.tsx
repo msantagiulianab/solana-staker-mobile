@@ -5,12 +5,17 @@
  *   - Receives stakeAccount, visible, onClose props
  *   - Displays stake account details (pubkey, status, delegated amount, voter)
  *   - Wires a "Deactivate Stake" button to createHandleDeactivate factory
+ *   - Shows "Withdraw Stake" button for inactive state
  *   - Only shows deactivate button for 'active' and 'activating' states
  *   - Uses useMobileWallet for authorizedPubkey and sendTransactions
+ *   - Renders a non-dismissible transaction progress overlay when
+ *     TransactionStatus !== 'IDLE'
  *
  * Mock strategy:
  *   - Inline mocks for useMobileWallet, createHandleDeactivate
- *   - Pure helpers (showDeactivateButton) tested without rendering
+ *   - Pure helpers (showDeactivateButton, showWithdrawButton,
+ *     getCurrentStepIndex, getRowVisualState, createHandleTransactionFlow)
+ *     tested without rendering
  */
 
 import { render, waitFor } from '@testing-library/react-native'
@@ -60,6 +65,11 @@ jest.mock('@/features/staking/staking-types', () => ({
 import {
   StakeManagerModal,
   showDeactivateButton,
+  showWithdrawButton,
+  getCurrentStepIndex,
+  getRowVisualState,
+  createHandleTransactionFlow,
+  PROGRESS_ROWS,
 } from '../StakeManagerModal'
 import { createHandleDeactivate } from '@/features/staking/deactivate-stake'
 
@@ -98,7 +108,7 @@ beforeEach(() => {
 })
 
 // ---------------------------------------------------------------------------
-// 1. Pure helper tests
+// 1. Pure helper tests — showDeactivateButton
 // ---------------------------------------------------------------------------
 describe('showDeactivateButton', () => {
   it('returns true for active state', () => {
@@ -119,7 +129,201 @@ describe('showDeactivateButton', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 2. Component tests
+// 2. Pure helper tests — showWithdrawButton
+// ---------------------------------------------------------------------------
+describe('showWithdrawButton', () => {
+  it('returns false for active state', () => {
+    expect(showWithdrawButton('active')).toBe(false)
+  })
+
+  it('returns false for activating state', () => {
+    expect(showWithdrawButton('activating')).toBe(false)
+  })
+
+  it('returns false for deactivating state', () => {
+    expect(showWithdrawButton('deactivating')).toBe(false)
+  })
+
+  it('returns true for inactive state', () => {
+    expect(showWithdrawButton('inactive')).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 3. Pure function tests — getCurrentStepIndex
+// ---------------------------------------------------------------------------
+describe('getCurrentStepIndex', () => {
+  it('returns 0 for AWAITING_SIGNATURE', () => {
+    expect(getCurrentStepIndex('AWAITING_SIGNATURE')).toBe(0)
+  })
+
+  it('returns 1 for CONFIRMING', () => {
+    expect(getCurrentStepIndex('CONFIRMING')).toBe(1)
+  })
+
+  it('returns 2 for SUCCESS', () => {
+    expect(getCurrentStepIndex('SUCCESS')).toBe(2)
+  })
+
+  it('returns -1 for IDLE', () => {
+    expect(getCurrentStepIndex('IDLE')).toBe(-1)
+  })
+
+  it('returns -1 for ERROR', () => {
+    expect(getCurrentStepIndex('ERROR')).toBe(-1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 4. Pure function tests — getRowVisualState
+// ---------------------------------------------------------------------------
+describe('getRowVisualState', () => {
+  it('returns complete for all rows when SUCCESS', () => {
+    expect(getRowVisualState('SUCCESS', 'AWAITING_SIGNATURE')).toBe('complete')
+    expect(getRowVisualState('SUCCESS', 'CONFIRMING')).toBe('complete')
+    expect(getRowVisualState('SUCCESS', 'SUCCESS')).toBe('complete')
+  })
+
+  it('returns active for the matching status row when AWAITING_SIGNATURE', () => {
+    expect(getRowVisualState('AWAITING_SIGNATURE', 'AWAITING_SIGNATURE')).toBe(
+      'active',
+    )
+    expect(getRowVisualState('AWAITING_SIGNATURE', 'CONFIRMING')).toBe(
+      'pending',
+    )
+    expect(getRowVisualState('AWAITING_SIGNATURE', 'SUCCESS')).toBe('pending')
+  })
+
+  it('returns complete for passed rows and active for current row when CONFIRMING', () => {
+    expect(getRowVisualState('CONFIRMING', 'AWAITING_SIGNATURE')).toBe(
+      'complete',
+    )
+    expect(getRowVisualState('CONFIRMING', 'CONFIRMING')).toBe('active')
+    expect(getRowVisualState('CONFIRMING', 'SUCCESS')).toBe('pending')
+  })
+
+  it('returns complete up to AWAITING_SIGNATURE, active for CONFIRMING, pending for SUCCESS on ERROR', () => {
+    expect(getRowVisualState('ERROR', 'AWAITING_SIGNATURE')).toBe('complete')
+    expect(getRowVisualState('ERROR', 'CONFIRMING')).toBe('active')
+    expect(getRowVisualState('ERROR', 'SUCCESS')).toBe('pending')
+  })
+
+  it('returns pending for all rows when IDLE', () => {
+    expect(getRowVisualState('IDLE', 'AWAITING_SIGNATURE')).toBe('pending')
+    expect(getRowVisualState('IDLE', 'CONFIRMING')).toBe('pending')
+    expect(getRowVisualState('IDLE', 'SUCCESS')).toBe('pending')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 5. Pure factory tests — createHandleTransactionFlow
+// ---------------------------------------------------------------------------
+describe('createHandleTransactionFlow', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it('sequences through AWAITING_SIGNATURE -> CONFIRMING -> SUCCESS (no realHandler)', async () => {
+    const statuses: string[] = []
+    const setStatus = (s: string) => statuses.push(s)
+
+    const flow = createHandleTransactionFlow(setStatus as any)
+    const promise = flow()
+
+    // Immediately after call, state should be set to AWAITING_SIGNATURE
+    expect(statuses).toEqual(['AWAITING_SIGNATURE'])
+
+    // Advance past first 2s timer
+    jest.advanceTimersByTime(2000)
+    await Promise.resolve() // flush microtask from setTimeout
+    expect(statuses).toEqual(['AWAITING_SIGNATURE', 'CONFIRMING'])
+
+    // Advance past second 2s timer
+    jest.advanceTimersByTime(2000)
+    // Await the full promise to ensure all async work completes
+    await promise
+    expect(statuses).toEqual([
+      'AWAITING_SIGNATURE',
+      'CONFIRMING',
+      'SUCCESS',
+    ])
+  })
+
+  it('invokes realHandler between CONFIRMING and SUCCESS', async () => {
+    const statuses: string[] = []
+    const setStatus = (s: string) => statuses.push(s)
+    const realHandler = jest.fn()
+
+    const flow = createHandleTransactionFlow(setStatus as any, realHandler)
+    const promise = flow()
+
+    expect(statuses).toEqual(['AWAITING_SIGNATURE'])
+
+    jest.advanceTimersByTime(2000)
+    await Promise.resolve()
+    expect(statuses).toEqual(['AWAITING_SIGNATURE', 'CONFIRMING'])
+
+    // realHandler should NOT have been called yet
+    expect(realHandler).not.toHaveBeenCalled()
+
+    jest.advanceTimersByTime(2000)
+    // Await the full promise to flush all microtasks
+    await promise
+
+    // Now realHandler should have been called
+    expect(realHandler).toHaveBeenCalledTimes(1)
+    expect(statuses).toEqual([
+      'AWAITING_SIGNATURE',
+      'CONFIRMING',
+      'SUCCESS',
+    ])
+  })
+
+  it('transitions to ERROR when realHandler throws', async () => {
+    const statuses: string[] = []
+    const setStatus = (s: string) => statuses.push(s)
+    const realHandler = jest.fn().mockRejectedValue(new Error('tx failed'))
+
+    const flow = createHandleTransactionFlow(setStatus as any, realHandler)
+    const promise = flow()
+
+    jest.advanceTimersByTime(2000) // AWAITING_SIGNATURE timer
+    await Promise.resolve()
+    jest.advanceTimersByTime(2000) // CONFIRMING timer
+    await promise
+
+    expect(statuses).toEqual([
+      'AWAITING_SIGNATURE',
+      'CONFIRMING',
+      'ERROR',
+    ])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 6. PROGRESS_ROWS constant
+// ---------------------------------------------------------------------------
+describe('PROGRESS_ROWS', () => {
+  it('has three entries in order: AWAITING_SIGNATURE, CONFIRMING, SUCCESS', () => {
+    expect(PROGRESS_ROWS).toHaveLength(3)
+    expect(PROGRESS_ROWS[0].status).toBe('AWAITING_SIGNATURE')
+    expect(PROGRESS_ROWS[1].status).toBe('CONFIRMING')
+    expect(PROGRESS_ROWS[2].status).toBe('SUCCESS')
+  })
+
+  it('each row has a non-empty label', () => {
+    for (const row of PROGRESS_ROWS) {
+      expect(row.label.length).toBeGreaterThan(0)
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 7. Component tests — basic rendering
 // ---------------------------------------------------------------------------
 describe('StakeManagerModal', () => {
   it('renders nothing when visible is false', async () => {
@@ -147,7 +351,6 @@ describe('StakeManagerModal', () => {
       expect(getByTestId('stake-manager-modal')).toBeTruthy()
     })
 
-    // Title
     expect(getByText('Stake Account')).toBeTruthy()
   })
 
@@ -195,7 +398,6 @@ describe('StakeManagerModal', () => {
     )
 
     await waitFor(() => {
-      // 3.5 SOL
       expect(getByText('3.50 SOL')).toBeTruthy()
     })
   })
@@ -313,5 +515,102 @@ describe('StakeManagerModal', () => {
     await waitFor(() => {
       expect(getByTestId('stake-manager-close')).toBeTruthy()
     })
+  })
+
+  // -----------------------------------------------------------------------
+  // 8. Withdraw button tests
+  // -----------------------------------------------------------------------
+  it('shows Withdraw Stake button for inactive state', async () => {
+    const { getByTestId } = await render(
+      <StakeManagerModal
+        stakeAccount={makeStakeAccount({ state: 'inactive' })}
+        visible={true}
+        onClose={jest.fn()}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(getByTestId('withdraw-stake-button')).toBeTruthy()
+    })
+  })
+
+  it('does not show Withdraw Stake button for active state', async () => {
+    const { queryByTestId } = await render(
+      <StakeManagerModal
+        stakeAccount={makeStakeAccount({ state: 'active' })}
+        visible={true}
+        onClose={jest.fn()}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(queryByTestId('withdraw-stake-button')).toBeNull()
+    })
+  })
+
+  // -----------------------------------------------------------------------
+  // 9. Progress overlay — does NOT appear when idle
+  // -----------------------------------------------------------------------
+  it('does not render the progress overlay when transaction is idle', async () => {
+    const { queryByTestId } = await render(
+      <StakeManagerModal
+        stakeAccount={makeStakeAccount({ state: 'active' })}
+        visible={true}
+        onClose={jest.fn()}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(
+        queryByTestId('transaction-progress-overlay'),
+      ).toBeNull()
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 10. Pure visual-state integration tests
+//     Tests that verify getRowVisualState behavior for all statuses
+//     without needing to render the component with fake timers
+// ---------------------------------------------------------------------------
+describe('Progress overlay visual states — pure integration', () => {
+  it('AWAITING_SIGNATURE: row 0 = active, rows 1-2 = pending', () => {
+    const visual0 = getRowVisualState('AWAITING_SIGNATURE', 'AWAITING_SIGNATURE')
+    const visual1 = getRowVisualState('AWAITING_SIGNATURE', 'CONFIRMING')
+    const visual2 = getRowVisualState('AWAITING_SIGNATURE', 'SUCCESS')
+
+    expect(visual0).toBe('active')
+    expect(visual1).toBe('pending')
+    expect(visual2).toBe('pending')
+  })
+
+  it('CONFIRMING: row 0 = complete, row 1 = active, row 2 = pending', () => {
+    const visual0 = getRowVisualState('CONFIRMING', 'AWAITING_SIGNATURE')
+    const visual1 = getRowVisualState('CONFIRMING', 'CONFIRMING')
+    const visual2 = getRowVisualState('CONFIRMING', 'SUCCESS')
+
+    expect(visual0).toBe('complete')
+    expect(visual1).toBe('active')
+    expect(visual2).toBe('pending')
+  })
+
+  it('SUCCESS: all rows = complete', () => {
+    const visual0 = getRowVisualState('SUCCESS', 'AWAITING_SIGNATURE')
+    const visual1 = getRowVisualState('SUCCESS', 'CONFIRMING')
+    const visual2 = getRowVisualState('SUCCESS', 'SUCCESS')
+
+    expect(visual0).toBe('complete')
+    expect(visual1).toBe('complete')
+    expect(visual2).toBe('complete')
+  })
+
+  it('ERROR: row 0 = complete, row 1 = active, row 2 = pending', () => {
+    const visual0 = getRowVisualState('ERROR', 'AWAITING_SIGNATURE')
+    const visual1 = getRowVisualState('ERROR', 'CONFIRMING')
+    const visual2 = getRowVisualState('ERROR', 'SUCCESS')
+
+    expect(visual0).toBe('complete')
+    expect(visual1).toBe('active')
+    expect(visual2).toBe('pending')
   })
 })

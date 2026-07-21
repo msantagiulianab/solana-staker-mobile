@@ -8,6 +8,26 @@
 import type { StakeAccountInfo } from '@/features/staking/use-get-stake-accounts'
 
 // ---------------------------------------------------------------------------
+// Transaction lifecycle status
+// ---------------------------------------------------------------------------
+
+/**
+ * Transaction progress checkpoints for the non-dismissible overlay.
+ *
+ * - IDLE:              No transaction is in flight
+ * - AWAITING_SIGNATURE:Waiting for the user to approve in their wallet
+ * - CONFIRMING:        Transaction submitted, waiting for block confirmation
+ * - SUCCESS:           Transaction confirmed on-chain
+ * - ERROR:             Transaction failed or was rejected by the user
+ */
+export type TransactionStatus =
+  | 'IDLE'
+  | 'AWAITING_SIGNATURE'
+  | 'CONFIRMING'
+  | 'SUCCESS'
+  | 'ERROR'
+
+// ---------------------------------------------------------------------------
 // Stake state labels
 // ---------------------------------------------------------------------------
 
