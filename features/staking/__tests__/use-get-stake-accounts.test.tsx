@@ -127,11 +127,17 @@ import { STAKE_PROGRAM_ADDRESS } from '@solana-program/stake'
 import type { Address } from '@solana/kit'
 
 // ---------------------------------------------------------------------------
-// Test wrapper
+// Test wrapper — gcTime: 0 prevents React Query GC timers from keeping
+// Jest workers alive after tests complete
 // ---------------------------------------------------------------------------
 function createWrapper() {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: {
+      queries: {
+        retry: false,
+        gcTime: 0,
+      },
+    },
   })
   return ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
