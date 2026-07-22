@@ -11,16 +11,14 @@
  *   - Shows "Deactivate Stake" button for active/activating states
  *   - Shows "Withdraw Stake" button for inactive state
  *   - Wires deactivation to the live createHandleDeactivate pure factory
- *     (builds on-chain instruction via @solana-program/stake, sends through
- *      MWA adapter, maps MWA lifecycle to progress overlay states)
+ *   - Wires withdrawal to the live createHandleWithdraw pure factory
  *   - Renders a non-dismissible transaction progress overlay when a
  *     transaction lifecycle is active (TransactionStatus !== 'IDLE')
- *   - Invalidates the 'get-stake-accounts' query cache on successful
- *     deactivation so the portfolio refreshes automatically
+ *   - Invalidates both 'get-stake-accounts' and 'get-balance' query
+ *     caches on successful withdraw so the portfolio and balance refresh
  */
 
 import React, { useCallback, useMemo, useRef, useState } from 'react'
-import { Alert } from 'react-native'
 import {
   ActivityIndicator,
   Modal,
@@ -34,6 +32,7 @@ import { AppText } from '@/components/ui/app-text'
 import { useMobileWallet } from '@wallet-ui/react-native-kit'
 import { useQueryClient } from '@tanstack/react-query'
 import { createHandleDeactivate } from '@/features/staking/deactivate-stake'
+import { createHandleWithdraw } from '@/features/staking/withdraw-stake'
 import { lamportsToSol } from '@/utils/lamports-to-sol'
 import {
   STAKE_STATE_LABELS,
@@ -126,7 +125,7 @@ export function createHandleDeactivateFlow(
 
     try {
       // The real handler internally:
-      //   1. Builds the deactivation instruction
+      //   1. Builds the instruction
       //   2. Calls sendTransactions(instructions) — MWA handshake
       //   3. Shows Alert with signature
       await realHandler()
@@ -137,8 +136,7 @@ export function createHandleDeactivateFlow(
       // Transaction has been broadcast to the cluster
       setStatus('SUCCESS')
 
-      // Invalidate the stake accounts query cache so the portfolio
-      // refreshes automatically with the updated state
+      // Invalidate query caches so the portfolio refreshes
       if (onSuccess) {
         onSuccess()
       }
@@ -162,14 +160,11 @@ export function getRowVisualState(
   currentStatus: TransactionStatus,
   rowStatus: TransactionStatus,
 ): RowVisualState {
-  // When transaction succeeded, all rows are complete
   if (currentStatus === 'SUCCESS') {
     return 'complete'
   }
 
   if (currentStatus === 'ERROR') {
-    // When error occurs, show all rows up to AWAITING_SIGNATURE as complete,
-    // CONFIRMING as active (to indicate where we were), and SUCCESS as pending.
     if (rowStatus === 'AWAITING_SIGNATURE') return 'complete'
     if (rowStatus === 'CONFIRMING') return 'active'
     return 'pending'
@@ -209,7 +204,6 @@ export function StakeManagerModal({
   if (visible && stakeAccount.pubkey !== prevPubkey.current) {
     prevPubkey.current = stakeAccount.pubkey
     if (transactionStatus !== 'IDLE') {
-      // Queue a state reset on next render cycle — React will batch it
       setTransactionStatus('IDLE')
     }
   }
@@ -223,6 +217,15 @@ export function StakeManagerModal({
       sendTransactions as any,
     )
   }, [stakeAccount.pubkey, account?.address, sendTransactions])
+
+  const _realWithdrawHandler = useMemo(() => {
+    return createHandleWithdraw(
+      stakeAccount.pubkey,
+      stakeAccount.lamports,
+      account?.address,
+      sendTransactions as any,
+    )
+  }, [stakeAccount.pubkey, stakeAccount.lamports, account?.address, sendTransactions])
 
   const canDeactivate = showDeactivateButton(stakeAccount.state)
   const canWithdraw = showWithdrawButton(stakeAccount.state)
@@ -241,17 +244,16 @@ export function StakeManagerModal({
   }, [_realDeactivateHandler, queryClient])
 
   const handleWithdraw = useCallback(() => {
-    // Withdraw is not wired to a real handler yet — the flow factory
-    // will transition through AWAITING_SIGNATURE → CONFIRMING → ERROR
-    // (or SUCCESS) once the real handler is connected.
     const flow = createHandleDeactivateFlow(
       setTransactionStatus,
-      async () => {
-        Alert.alert('Coming Soon', 'Withdraw Stake is under development.')
+      _realWithdrawHandler,
+      () => {
+        queryClient.invalidateQueries({ queryKey: ['get-stake-accounts'] })
+        queryClient.invalidateQueries({ queryKey: ['get-balance'] })
       },
     )
     return flow()
-  }, [])
+  }, [_realWithdrawHandler, queryClient])
 
   const delegatedSol =
     stakeAccount.delegatedAmount != null

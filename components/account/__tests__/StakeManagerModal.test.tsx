@@ -25,13 +25,30 @@ import { Alert } from 'react-native'
 import type { StakeAccountInfo } from '@/features/staking/use-get-stake-accounts'
 
 // ---------------------------------------------------------------------------
-// Mocks
+// Mocks — ESM chain breakers first
 // ---------------------------------------------------------------------------
+
+// Break the @solana/kit and @solana-program/stake ESM import chain
+// (withdraw-stake.ts imports these; the test must mock them before
+//  any dynamic import resolves the chain)
+jest.mock('@solana/kit', () => ({
+  address: (s: any) => s,
+}))
+
+jest.mock('@solana-program/stake', () => ({
+  getDeactivateInstruction: jest.fn().mockReturnValue({}),
+  getWithdrawInstruction: jest.fn().mockReturnValue({}),
+}))
+
 const mockCreateHandleDeactivate = jest.fn()
 
 jest.mock('@/features/staking/deactivate-stake', () => ({
   createHandleDeactivate: (a: any, b: any, c: any) =>
     mockCreateHandleDeactivate(a, b, c),
+}))
+
+jest.mock('@/features/staking/withdraw-stake', () => ({
+  createHandleWithdraw: () => jest.fn().mockResolvedValue(undefined),
 }))
 
 const mockUseMobileWallet = jest.fn()
@@ -575,8 +592,6 @@ describe('StakeManagerModal', () => {
 
 // ---------------------------------------------------------------------------
 // 10. Pure visual-state integration tests
-//      Tests that verify getRowVisualState behavior for all statuses
-//      without needing to render the component with fake timers
 // ---------------------------------------------------------------------------
 describe('Progress overlay visual states — pure integration', () => {
   it('AWAITING_SIGNATURE: row 0 = active, rows 1-2 = pending', () => {
