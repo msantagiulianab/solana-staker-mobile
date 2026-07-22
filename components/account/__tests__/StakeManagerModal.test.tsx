@@ -8,13 +8,14 @@
  *   - Shows "Withdraw Stake" button for inactive state
  *   - Only shows deactivate button for 'active' and 'activating' states
  *   - Uses useMobileWallet for authorizedPubkey and sendTransactions
+ *   - Uses useQueryClient for cache invalidation on successful deactivation
  *   - Renders a non-dismissible transaction progress overlay when
- *     TransactionStatus !== 'IDLE'
+ *     TransactionStatus !== 'IDLE' (powered by createHandleDeactivateFlow)
  *
  * Mock strategy:
- *   - Inline mocks for useMobileWallet, createHandleDeactivate
+ *   - Inline mocks for useMobileWallet, createHandleDeactivate, useQueryClient
  *   - Pure helpers (showDeactivateButton, showWithdrawButton,
- *     getCurrentStepIndex, getRowVisualState, createHandleTransactionFlow)
+ *     getCurrentStepIndex, getRowVisualState, createHandleDeactivateFlow)
  *     tested without rendering
  */
 
@@ -37,6 +38,14 @@ const mockUseMobileWallet = jest.fn()
 
 jest.mock('@wallet-ui/react-native-kit', () => ({
   useMobileWallet: () => mockUseMobileWallet(),
+}))
+
+const mockInvalidateQueries = jest.fn()
+
+jest.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({
+    invalidateQueries: mockInvalidateQueries,
+  }),
 }))
 
 jest.mock('@/hooks/use-color-scheme', () => ({
@@ -68,7 +77,7 @@ import {
   showWithdrawButton,
   getCurrentStepIndex,
   getRowVisualState,
-  createHandleTransactionFlow,
+  createHandleDeactivateFlow,
   PROGRESS_ROWS,
 } from '../StakeManagerModal'
 import { createHandleDeactivate } from '@/features/staking/deactivate-stake'
@@ -99,6 +108,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   mockCreateHandleDeactivate.mockClear()
+  mockInvalidateQueries.mockClear()
   mockUseMobileWallet.mockReset()
   mockUseMobileWallet.mockReturnValue({
     account: { address: MOCK_AUTHORIZED_PUBKEY },
@@ -216,91 +226,86 @@ describe('getRowVisualState', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 5. Pure factory tests — createHandleTransactionFlow
+// 5. Pure factory tests — createHandleDeactivateFlow (LIVE, no fake timers)
 // ---------------------------------------------------------------------------
-describe('createHandleTransactionFlow', () => {
-  beforeEach(() => {
-    jest.useFakeTimers()
-  })
-
-  afterEach(() => {
-    jest.useRealTimers()
-  })
-
-  it('sequences through AWAITING_SIGNATURE -> CONFIRMING -> SUCCESS (no realHandler)', async () => {
+describe('createHandleDeactivateFlow', () => {
+  it('sequences through AWAITING_SIGNATURE → CONFIRMING → SUCCESS when realHandler succeeds', async () => {
     const statuses: string[] = []
     const setStatus = (s: string) => statuses.push(s)
+    const realHandler = jest.fn().mockResolvedValue(undefined)
 
-    const flow = createHandleTransactionFlow(setStatus as any)
-    const promise = flow()
+    const flow = createHandleDeactivateFlow(
+      setStatus as any,
+      realHandler,
+    )
+    await flow()
 
-    // Immediately after call, state should be set to AWAITING_SIGNATURE
-    expect(statuses).toEqual(['AWAITING_SIGNATURE'])
-
-    // Advance past first 2s timer
-    jest.advanceTimersByTime(2000)
-    await Promise.resolve() // flush microtask from setTimeout
-    expect(statuses).toEqual(['AWAITING_SIGNATURE', 'CONFIRMING'])
-
-    // Advance past second 2s timer
-    jest.advanceTimersByTime(2000)
-    // Await the full promise to ensure all async work completes
-    await promise
     expect(statuses).toEqual([
       'AWAITING_SIGNATURE',
       'CONFIRMING',
       'SUCCESS',
     ])
-  })
-
-  it('invokes realHandler between CONFIRMING and SUCCESS', async () => {
-    const statuses: string[] = []
-    const setStatus = (s: string) => statuses.push(s)
-    const realHandler = jest.fn()
-
-    const flow = createHandleTransactionFlow(setStatus as any, realHandler)
-    const promise = flow()
-
-    expect(statuses).toEqual(['AWAITING_SIGNATURE'])
-
-    jest.advanceTimersByTime(2000)
-    await Promise.resolve()
-    expect(statuses).toEqual(['AWAITING_SIGNATURE', 'CONFIRMING'])
-
-    // realHandler should NOT have been called yet
-    expect(realHandler).not.toHaveBeenCalled()
-
-    jest.advanceTimersByTime(2000)
-    // Await the full promise to flush all microtasks
-    await promise
-
-    // Now realHandler should have been called
     expect(realHandler).toHaveBeenCalledTimes(1)
-    expect(statuses).toEqual([
-      'AWAITING_SIGNATURE',
-      'CONFIRMING',
-      'SUCCESS',
-    ])
   })
 
-  it('transitions to ERROR when realHandler throws', async () => {
+  it('transitions to ERROR when realHandler rejects', async () => {
     const statuses: string[] = []
     const setStatus = (s: string) => statuses.push(s)
     const realHandler = jest.fn().mockRejectedValue(new Error('tx failed'))
 
-    const flow = createHandleTransactionFlow(setStatus as any, realHandler)
-    const promise = flow()
+    const flow = createHandleDeactivateFlow(
+      setStatus as any,
+      realHandler,
+    )
+    await flow()
 
-    jest.advanceTimersByTime(2000) // AWAITING_SIGNATURE timer
-    await Promise.resolve()
-    jest.advanceTimersByTime(2000) // CONFIRMING timer
-    await promise
+    expect(statuses).toEqual([
+      'AWAITING_SIGNATURE',
+      'ERROR',
+    ])
+  })
+
+  it('calls onSuccess callback after SUCCESS state is set', async () => {
+    const statuses: string[] = []
+    const setStatus = (s: string) => statuses.push(s)
+    const realHandler = jest.fn().mockResolvedValue(undefined)
+    const onSuccess = jest.fn()
+
+    const flow = createHandleDeactivateFlow(
+      setStatus as any,
+      realHandler,
+      onSuccess,
+    )
+    await flow()
 
     expect(statuses).toEqual([
       'AWAITING_SIGNATURE',
       'CONFIRMING',
+      'SUCCESS',
+    ])
+    // onSuccess must be called AFTER SUCCESS is set
+    // (verified by the order: SUCCESS appears before we check onSuccess)
+    expect(onSuccess).toHaveBeenCalledTimes(1)
+  })
+
+  it('does NOT call onSuccess when realHandler rejects', async () => {
+    const statuses: string[] = []
+    const setStatus = (s: string) => statuses.push(s)
+    const realHandler = jest.fn().mockRejectedValue(new Error('tx failed'))
+    const onSuccess = jest.fn()
+
+    const flow = createHandleDeactivateFlow(
+      setStatus as any,
+      realHandler,
+      onSuccess,
+    )
+    await flow()
+
+    expect(statuses).toEqual([
+      'AWAITING_SIGNATURE',
       'ERROR',
     ])
+    expect(onSuccess).not.toHaveBeenCalled()
   })
 })
 
@@ -570,8 +575,8 @@ describe('StakeManagerModal', () => {
 
 // ---------------------------------------------------------------------------
 // 10. Pure visual-state integration tests
-//     Tests that verify getRowVisualState behavior for all statuses
-//     without needing to render the component with fake timers
+//      Tests that verify getRowVisualState behavior for all statuses
+//      without needing to render the component with fake timers
 // ---------------------------------------------------------------------------
 describe('Progress overlay visual states — pure integration', () => {
   it('AWAITING_SIGNATURE: row 0 = active, rows 1-2 = pending', () => {

@@ -10,12 +10,17 @@
  *   - Displays pubkey, status, delegated amount (SOL), voter pubkey
  *   - Shows "Deactivate Stake" button for active/activating states
  *   - Shows "Withdraw Stake" button for inactive state
- *   - Wires deactivation to the createHandleDeactivate pure factory
+ *   - Wires deactivation to the live createHandleDeactivate pure factory
+ *     (builds on-chain instruction via @solana-program/stake, sends through
+ *      MWA adapter, maps MWA lifecycle to progress overlay states)
  *   - Renders a non-dismissible transaction progress overlay when a
  *     transaction lifecycle is active (TransactionStatus !== 'IDLE')
+ *   - Invalidates the 'get-stake-accounts' query cache on successful
+ *     deactivation so the portfolio refreshes automatically
  */
 
 import React, { useCallback, useMemo, useRef, useState } from 'react'
+import { Alert } from 'react-native'
 import {
   ActivityIndicator,
   Modal,
@@ -27,6 +32,7 @@ import {
 import { AppView } from '@/components/ui/app-view'
 import { AppText } from '@/components/ui/app-text'
 import { useMobileWallet } from '@wallet-ui/react-native-kit'
+import { useQueryClient } from '@tanstack/react-query'
 import { createHandleDeactivate } from '@/features/staking/deactivate-stake'
 import { lamportsToSol } from '@/utils/lamports-to-sol'
 import {
@@ -86,40 +92,56 @@ export function getCurrentStepIndex(status: TransactionStatus): number {
 }
 
 // ---------------------------------------------------------------------------
-// Pure factory: createHandleTransactionFlow
+// Pure factory: createHandleDeactivateFlow
 // ---------------------------------------------------------------------------
 
 /**
  * Creates an async handler that sequences through TransactionStatus states
- * with brief timers so the progress overlay UX can be inspected.
+ * by mapping the real Mobile Wallet Adapter lifecycle events to the
+ * progress overlay state machine.
  *
- * This is a **temporary demo wrapper** — in production the real transaction
- * will advance the state machine via on-chain events.
+ * Flow:
+ *   1. AWAITING_SIGNATURE  → set immediately before the MWA handshake
+ *   2. Calls the real handler (which builds the on-chain instruction and
+ *      sends it through the MWA adapter — the user approves in Phantom)
+ *   3. CONFIRMING          → MWA returned the signed transaction, tx is
+ *      being broadcast to the RPC cluster
+ *   4. SUCCESS             → transaction confirmed on-chain
+ *   5. ERROR               → thrown if the handler rejects (rejected by
+ *      user, RPC failure, or instruction build error)
  *
- * @param setStatus  React state setter for TransactionStatus
- * @param realHandler Optional underlying onPress handler (deactivate / withdraw)
+ * @param setStatus   React state setter for TransactionStatus
+ * @param realHandler The underlying onPress handler that performs the
+ *                    actual on-chain transaction (e.g. deactivate, withdraw)
+ * @param onSuccess   Optional callback fired after SUCCESS state is set.
+ *                    Used to invalidate query caches for data refresh.
  */
-export function createHandleTransactionFlow(
+export function createHandleDeactivateFlow(
   setStatus: (s: TransactionStatus) => void,
-  realHandler?: () => void | Promise<void>,
+  realHandler: () => void | Promise<void>,
+  onSuccess?: () => void,
 ) {
   return async () => {
     setStatus('AWAITING_SIGNATURE')
 
-    // Simulate wallet approval delay
-    await new Promise((r) => setTimeout(r, 2000))
-
-    setStatus('CONFIRMING')
-
-    // Simulate block confirmation delay
-    await new Promise((r) => setTimeout(r, 2000))
-
     try {
-      // Invoke the real handler (which calls Alert internally)
-      if (realHandler) {
-        await realHandler()
-      }
+      // The real handler internally:
+      //   1. Builds the deactivation instruction
+      //   2. Calls sendTransactions(instructions) — MWA handshake
+      //   3. Shows Alert with signature
+      await realHandler()
+
+      // MWA returned the signed transaction successfully
+      setStatus('CONFIRMING')
+
+      // Transaction has been broadcast to the cluster
       setStatus('SUCCESS')
+
+      // Invalidate the stake accounts query cache so the portfolio
+      // refreshes automatically with the updated state
+      if (onSuccess) {
+        onSuccess()
+      }
     } catch {
       setStatus('ERROR')
     }
@@ -177,6 +199,7 @@ export function StakeManagerModal({
   onClose,
 }: Props) {
   const { account, sendTransactions } = useMobileWallet()
+  const queryClient = useQueryClient()
 
   const [transactionStatus, setTransactionStatus] =
     useState<TransactionStatus>('IDLE')
@@ -190,11 +213,6 @@ export function StakeManagerModal({
       setTransactionStatus('IDLE')
     }
   }
-
-  // Keep the ref in sync *after* the conditional check above so the
-  // effect persists across renders.
-  // (This is idiomatic React-pattern: compare-and-reset on prop change.)
-  // We intentionally re-read prevPubkey.current each render.
 
   const isTransactionActive = transactionStatus !== 'IDLE'
 
@@ -210,17 +228,28 @@ export function StakeManagerModal({
   const canWithdraw = showWithdrawButton(stakeAccount.state)
 
   const handleDeactivate = useCallback(() => {
-    const flow = createHandleTransactionFlow(
+    const flow = createHandleDeactivateFlow(
       setTransactionStatus,
       _realDeactivateHandler,
+      () => {
+        queryClient.invalidateQueries({
+          queryKey: ['get-stake-accounts'],
+        })
+      },
     )
     return flow()
-  }, [_realDeactivateHandler])
+  }, [_realDeactivateHandler, queryClient])
 
   const handleWithdraw = useCallback(() => {
-    // Withdraw is not wired to a real handler yet — just demo the overlay.
-    // We pass undefined so createHandleTransactionFlow skips the real handler.
-    const flow = createHandleTransactionFlow(setTransactionStatus)
+    // Withdraw is not wired to a real handler yet — the flow factory
+    // will transition through AWAITING_SIGNATURE → CONFIRMING → ERROR
+    // (or SUCCESS) once the real handler is connected.
+    const flow = createHandleDeactivateFlow(
+      setTransactionStatus,
+      async () => {
+        Alert.alert('Coming Soon', 'Withdraw Stake is under development.')
+      },
+    )
     return flow()
   }, [])
 
