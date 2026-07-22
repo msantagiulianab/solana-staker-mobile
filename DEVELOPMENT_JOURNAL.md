@@ -561,3 +561,24 @@ No test regressions — the MWA connection layer is runtime behavior that cannot
 - `features/staking/use-get-stake-accounts.ts`: Added `enabled: !!address` (line 104) and `filters: [{ memcmp: { offset: 44n, bytes: address as string } }]` (lines 116-122).
 - `components/account/account-feature.tsx`: Verified line 56 passes real `address` variable — no change needed.
 - `README.md`: Updated Portfolio Dashboard feature description to mention memcmp filter and enabled guard.
+
+## 2026-07-22 — Stake SOL Missing Signer Bug Fix
+
+### Root Cause
+In `app/(tabs)/staking/[votePubkey].tsx`, the `createHandleStake` function's `getCreateAccountInstruction` call used `payer: stakeKeyPair` (a newly generated keypair with 0 SOL) as the rent payer. The user's connected wallet must fund the stake account creation. Additionally:
+- **`stakeAuthority`** in `getDelegateStakeInstruction` was set to `stakeKeyPair` — it should be the user's wallet address (`userAddress`), because the wallet must authorize the delegation
+- **`withdrawAuthority`** in `getInitializeCheckedInstruction` was set to `stakeKeyPair` — should be `userAddress` for the same reason
+
+### Fixes Applied
+1. **`getCreateAccountInstruction`: `payer`** changed from `stakeKeyPair as any` to `userAddress as any`
+2. **`getInitializeCheckedInstruction`: `withdrawAuthority`** changed from `stakeKeyPair as any` to `userAddress as any`
+3. **`getDelegateStakeInstruction`: `stakeAuthority`** changed from `stakeKeyPair as any` to `userAddress as any`
+4. Test assertions updated to verify `withdrawAuthority: 'user123'` and `stakeAuthority: 'user123'`
+
+### MWA/Solana Complexities
+- The `@wallet-ui/react-native-kit` `sendTransactions()` function internally calls `signAndSendTransactionMessageWithSigners()`, which only registers the MWA wallet as fee payer signer — it does not accept additional signer arrays
+- All `@solana-program/*` instruction builders return branded `TransactionSigner` nominal types that require `as any` casts for `@solana/kit` v2 compatibility
+- The `payer` field in `getCreateAccountInstruction` uses a branded `TransactionSigner<string>` type (feePayer concept), while other account fields use `Address<string>`
+
+### Verification
+All 10 votePubkey tests pass: 10 passed, 10 total.

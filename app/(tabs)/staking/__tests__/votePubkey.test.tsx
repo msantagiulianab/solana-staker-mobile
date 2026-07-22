@@ -109,10 +109,10 @@ describe('Staking [votePubkey] screen', () => {
       expect.objectContaining({ lamports: 1_502_282_880n, space: 200 }),
     )
     expect(getInitializeCheckedInstruction).toHaveBeenCalledWith(
-      expect.objectContaining({ stake: 'stakeAcctAddress', stakeAuthority: 'user123' }),
+      expect.objectContaining({ stake: 'stakeAcctAddress', stakeAuthority: 'user123', withdrawAuthority: 'user123' }),
     )
     expect(getDelegateStakeInstruction).toHaveBeenCalledWith(
-      expect.objectContaining({ vote: 'voteAddrABC' }),
+      expect.objectContaining({ vote: 'voteAddrABC', stakeAuthority: 'user123' }),
     )
     expect(mockSend).toHaveBeenCalledTimes(1)
   })

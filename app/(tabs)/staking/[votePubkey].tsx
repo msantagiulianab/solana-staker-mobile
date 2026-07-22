@@ -47,7 +47,7 @@ export function createHandleStake(
       const totalLamports = lamportsAmount + RENT_EXEMPT_LAMPORTS
 
       const createAccountIx = getCreateAccountInstruction({
-        payer: stakeKeyPair as any,
+        payer: { address: userAddress } as any,
         newAccount: stakeKeyPair as any,
         lamports: totalLamports,
         space: STAKE_ACCOUNT_SPACE,
@@ -57,14 +57,14 @@ export function createHandleStake(
       const initializeIx = getInitializeCheckedInstruction({
         stake: stakeAddress as any,
         stakeAuthority: userAddress as any,
-        withdrawAuthority: stakeKeyPair as any,
+        withdrawAuthority: userAddress as any,
       })
 
       const delegateIx = getDelegateStakeInstruction({
         stake: stakeAddress as any,
         vote: voteAddress as any,
         unused: userAddress as any,
-        stakeAuthority: stakeKeyPair as any,
+        stakeAuthority: userAddress as any,
       })
 
       const instructions = [createAccountIx, initializeIx, delegateIx]

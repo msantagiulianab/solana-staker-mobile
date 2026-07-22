@@ -3,7 +3,7 @@ import { AppIdentity, createSolanaDevnet, createSolanaTestnet, SolanaCluster } f
 export class AppConfig {
   static identity: AppIdentity = {
     name: 'solana-staker-mobile',
-    uri: 'https://example.com',
+    uri: 'https://github.com/msantagiulianab/solana-staker-mobile',
   }
   static networks: SolanaCluster[] = [
     createSolanaDevnet({ url: 'https://api.devnet.solana.com' }),
