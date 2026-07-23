@@ -582,3 +582,34 @@ In `app/(tabs)/staking/[votePubkey].tsx`, the `createHandleStake` function's `ge
 
 ### Verification
 All 10 votePubkey tests pass: 10 passed, 10 total.
+
+---
+
+## 2026-07-23 — Withdraw Stake Factory Test Suite
+
+### Architectural Decisions
+- **Pure factory pattern replicated from `createHandleDeactivate`:** `createHandleWithdraw` follows the identical architecture — a function that receives parameters and returns an async handler, tested without any React rendering.
+- **Withdraw-specific mock:** Added `getWithdrawInstruction` to the `jest.mock('@solana-program/stake')` factory, mirroring `getDeactivateInstruction` mock structure.
+- **Rethrow handling:** Unlike `deactivate-stake.ts` which swallows errors in catch, `withdraw-stake.ts` rethrows (`throw error` on line 68). Two error-resilience tests wrap `await handler()` in try/catch to absorb the propagated rejection while still asserting the Alert was shown.
+
+### Tests Added (10 tests, 1 suite)
+| Test | Type | Description |
+|------|------|-------------|
+| stakeAccountPubkey undefined | Validation | Guards missing pubkey with Alert |
+| stakeAccountPubkey empty string | Validation | Guards falsy string pubkey |
+| stakeAccountLamports null/zero/negative | Validation | Single test covers all three falsy/edge balance values |
+| authorizedPubkey undefined | Validation | Guards disconnected wallet |
+| authorizedPubkey empty string | Validation | Guards empty wallet address string |
+| sendTransaction undefined | Validation | Guards missing MWA send function |
+| instruction parameter shapes | Structural | Verifies stake, withdrawAuthority, recipient, lamports passed to `getWithdrawInstruction` |
+| success alert with signature | Success flow | Confirms Alert.alert('Success', ...) with resolved tx sig |
+| sendTransaction rejection | Error resilience | Catches rethrown rejection, verifies Alert.alert fired |
+| getWithdrawInstruction throws | Error resilience | Confirms Alert.alert fired, sendTransaction NOT called |
+
+### MWA/Solana Complexities
+- `getWithdrawInstruction` from `@solana-program/stake` expects `stake: Address`, `withdrawAuthority: { address: Address }`, `recipient: Address`, `lamports: bigint` — all satisfied via identity mock `address(s) => s`.
+- The `withdrawAuthority` parameter shape differs from `deactivate`'s `stakeAuthority` (nested object vs direct field), verified at lines 44-53 of `withdraw-stake.ts`.
+- Rethrow pattern (`throw error` at line 68) means callers must catch the handler's return to prevent unhandled promise rejections in production — intentional design for upstream error boundaries.
+
+### Verification
+All 10 withdraw-stake tests pass. Global sweep: **20 suites, 156 tests, 0 failures, 0 regressions**.

@@ -48,7 +48,7 @@ The app uses `@wallet-ui/react-native-kit` which wraps `@solana/kit` v2 and impl
 
 ## Test Status
 
-**19 suites · 146 tests · 100% passing**
+**20 suites · 156 tests · 100% passing**
 
 Coverage spans the full application stack: pure utility logic, React hooks with `@tanstack/react-query` data-fetching, Mobile Wallet Adapter (MWA) connection layers, staking architecture hooks (validator fetching, stake account derivation, deactivation flow), component state machines (modal progress overlays, portfolio dashboards), and expo-router auth guard routing.
 
@@ -68,12 +68,13 @@ Coverage spans the full application stack: pure utility logic, React hooks with 
 | Staking Architecture | `StakingFeature` (filter, sort, loading, error) | 7 | ✅ PASS |
 | Staking Architecture | `PortfolioDashboard` component | 16 | ✅ PASS |
 | Staking Architecture | `createHandleDeactivate` pure factory | 9 | ✅ PASS |
+| Staking Architecture | `createHandleWithdraw` pure factory | 10 | ✅ PASS |
 | Staking Architecture | `StakeManagerModal` (deactivate flow state machine, progress overlay, withdraw, select-account) | 43 | ✅ PASS |
 | Staking Architecture | `Staking [votePubkey]` screen (amount input, stake tx, alerts) | 10 | ✅ PASS |
 | Staking Architecture | `Staking` page (smoke) | 1 | ✅ PASS |
 | Routing | `RootLayout` auth guard (redirect sign-in ↔ staking) | 5 | ✅ PASS |
 | Routing | `TabLayout` (smoke) | 1 | ✅ PASS |
-| **Total** | | **146** | **✅ ALL PASSING** |
+| **Total** | | **156** | **✅ ALL PASSING** |
 
 ## Setup
 
