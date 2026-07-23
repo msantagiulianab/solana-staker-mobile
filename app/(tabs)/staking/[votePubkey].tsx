@@ -5,7 +5,7 @@ import { AppPage } from '@/components/ui/app-page'
 import { AppView } from '@/components/ui/app-view'
 import { AppText } from '@/components/ui/app-text'
 import { useMobileWallet } from '@wallet-ui/react-native-kit'
-import { address, createAddressWithSeed, sol, solToLamports } from '@solana/kit'
+import { address, createAddressWithSeed } from '@solana/kit'
 import {
   getDelegateStakeInstruction,
   getInitializeCheckedInstruction,
@@ -41,7 +41,14 @@ export function createHandleStake(
     try {
       const userAddress = address(account.address)
       const voteAddress = address(votePubkey)
-      const lamportsAmount = solToLamports(sol(amount))
+
+      // Convert SOL string to lamports using integer arithmetic.
+      // `BigInt('0.1')` throws `RangeError` in Hermes — approach avoids the
+      // branded `sol()`/`solToLamports()` chain which can pass a float
+      // through a BigInt constructor and crash the JS runtime.
+      const lamportsAmount = BigInt(
+        Math.floor(Number(amount) * 1_000_000_000),
+      )
       const totalLamports = lamportsAmount + RENT_EXEMPT_LAMPORTS
 
       // Deterministic seed — no keypair needed, no extra signer requirement.

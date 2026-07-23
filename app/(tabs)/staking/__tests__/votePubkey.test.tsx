@@ -20,8 +20,6 @@ jest.mock('@solana/kit', () => ({
     Promise.resolve('derivedStakeAcctAddr'),
   ),
   address: (s: string) => s,
-  sol: (s: string) => s,
-  solToLamports: () => 1_500_000_000n,
 }))
 
 jest.mock('@solana-program/stake', () => ({
