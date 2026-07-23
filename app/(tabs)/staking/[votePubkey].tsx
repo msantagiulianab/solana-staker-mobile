@@ -16,6 +16,21 @@ import { getCreateAccountWithSeedInstruction } from '@solana-program/system'
 const STAKE_ACCOUNT_SPACE = 200
 const RENT_EXEMPT_LAMPORTS = 2_282_880n
 
+/**
+ * Normalizes a v2 instruction (accounts/programAddress) into a bridge-safe
+ * shape that also exposes v1 keys (keys/programId).  The MWA bridge
+ * internally accesses `.accounts.length`; without this guard, `as any`-
+ * cast inputs can yield instructions where `accounts` is `undefined`.
+ */
+function normalizeInstruction(ix: any): any {
+  return {
+    ...ix,
+    accounts: ix.accounts ?? [],
+    keys: ix.keys ?? ix.accounts ?? [],
+    programId: ix.programId ?? ix.programAddress,
+  }
+}
+
 export function createHandleStake(
   account: { address: string } | undefined,
   amount: string,
@@ -42,7 +57,6 @@ export function createHandleStake(
       const userAddress = address(account.address)
       const voteAddress = address(votePubkey)
 
-      // Convert SOL string to lamports using integer arithmetic.
       const parsedAmount = Number(amount)
       if (isNaN(parsedAmount) || parsedAmount <= 0) {
         Alert.alert('Error', 'Please enter a valid amount greater than 0.')
@@ -53,7 +67,6 @@ export function createHandleStake(
       )
       const totalLamports = lamportsAmount + RENT_EXEMPT_LAMPORTS
 
-      // Deterministic seed — no keypair needed, no extra signer requirement.
       const seed = `stake:${Date.now()}`
       const stakeAddress = await createAddressWithSeed({
         baseAddress: userAddress,
@@ -79,9 +92,6 @@ export function createHandleStake(
         space: STAKE_ACCOUNT_SPACE,
       } as any)
 
-      // `stakeAuthority` expects `TransactionSigner` ({ address: Address }),
-      // not a raw `Address` string. Passing a bare Address causes `.address`
-      // to be `undefined`, crashing the builder on `.length` access.
       const initializeIx = getInitializeCheckedInstruction({
         stake: stakeAddress as any,
         stakeAuthority: { address: userAddress } as any,
@@ -95,7 +105,14 @@ export function createHandleStake(
         stakeAuthority: { address: userAddress } as any,
       })
 
-      const instructions = [createAccountIx, initializeIx, delegateIx]
+      // Normalize every instruction so the MWA bridge always sees
+      // `.accounts` as an array (never undefined).  Crashes like
+      // "Cannot read property 'length' of undefined" originate when
+      // `as any`-cast inputs produce v2 instructions whose internal
+      // accounts property is missing or stripped by the transport.
+      const instructions = [createAccountIx, initializeIx, delegateIx].map(
+        normalizeInstruction,
+      )
       const signature = await sendTransactions(instructions)
 
       Alert.alert('Success', `Transaction sent!\nSignature: ${signature}`)
