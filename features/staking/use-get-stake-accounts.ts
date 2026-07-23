@@ -71,7 +71,7 @@ export function extractVoterAndStake(
 export function parseStakeAccount(
   raw: { pubkey: string; account: { lamports: number; data: [string, string]; owner: string; executable: boolean; rentEpoch: number; space: number } },
   currentEpoch: bigint,
-): StakeAccountInfo {
+): StakeAccountInfo | null {
   // decodeAccount expects Branded nominal types (Lamports, Address).
   // We construct the encoded object using `as any` to satisfy the encoder's
   // runtime expectations — at runtime these are plain bigint/string values.
@@ -84,14 +84,19 @@ export function parseStakeAccount(
     space: BigInt(raw.account.space),
   } as any
 
-  const decoded = decodeAccount(encoded, getStakeStateAccountDecoder())
-  const stakeStateV2 = decoded.data.state
+  try {
+    const decoded = decodeAccount(encoded, getStakeStateAccountDecoder())
+    const stakeStateV2 = decoded.data.state
 
-  return {
-    pubkey: raw.pubkey,
-    lamports: BigInt(raw.account.lamports),
-    state: deriveStakeState(stakeStateV2, currentEpoch),
-    ...extractVoterAndStake(stakeStateV2),
+    return {
+      pubkey: raw.pubkey,
+      lamports: BigInt(raw.account.lamports),
+      state: deriveStakeState(stakeStateV2, currentEpoch),
+      ...extractVoterAndStake(stakeStateV2),
+    }
+  } catch (error) {
+    console.warn(`⚠️ [STAKE DECODE] Failed to decode account ${raw.pubkey}, skipping.`, error)
+    return null
   }
 }
 
@@ -109,29 +114,37 @@ export function useGetStakeAccounts({ address }: { address: Address }) {
     // mount, causing an OOM crash on mobile.
     enabled: !!address,
     queryFn: async () => {
-      const [rawAccounts, epochInfo] = await Promise.all([
-        client.rpc
-          .getProgramAccounts(STAKE_PROGRAM_ADDRESS as Address, {
-            encoding: 'base64',
-            // memcmp filter on authorized.withdrawer at byte offset 44.
-            // This restricts the RPC response to only the connected wallet's
-            // stake accounts instead of fetching the entire network registry.
-            filters: [
-              {
-                memcmp: {
-                  offset: 44n,
-                  bytes: address as string,
+      try {
+        const [rawAccounts, epochInfo] = await Promise.all([
+          client.rpc
+            .getProgramAccounts(STAKE_PROGRAM_ADDRESS as Address, {
+              encoding: 'base64',
+              // memcmp filter on authorized.withdrawer at byte offset 44.
+              // This restricts the RPC response to only the connected wallet's
+              // stake accounts instead of fetching the entire network registry.
+              filters: [
+                {
+                  memcmp: {
+                    offset: 44,
+                    bytes: address as string,
+                  },
                 },
-              },
-            ],
-          } as any)
-          .send() as unknown as Array<{ pubkey: string; account: { lamports: number; data: [string, string]; owner: string; executable: boolean; rentEpoch: number; space: number } }>,
-        client.rpc.getEpochInfo().send() as unknown as { epoch: bigint },
-      ])
+              ],
+            } as any)
+            .send() as unknown as Array<{ pubkey: string; account: { lamports: number; data: [string, string]; owner: string; executable: boolean; rentEpoch: number; space: number } }>,
+          client.rpc.getEpochInfo().send() as unknown as { epoch: bigint },
+        ])
 
-      const currentEpoch = epochInfo.epoch
+        const currentEpoch = epochInfo.epoch
 
-      return rawAccounts.map((raw) => parseStakeAccount(raw, currentEpoch))
+        return rawAccounts.flatMap((raw) => {
+          const result = parseStakeAccount(raw, currentEpoch)
+          return result ? [result] : []
+        })
+      } catch (error) {
+        console.error("🔴 [LIVE STAKE FETCH CRASH]:", error);
+        throw error
+      }
     },
   })
 }

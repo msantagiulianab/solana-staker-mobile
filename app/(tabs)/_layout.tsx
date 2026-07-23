@@ -13,31 +13,39 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="account"
+        name="account/index"
         options={{
           title: 'Account',
           tabBarIcon: ({ color }) => <UiIconSymbol name="wallet.pass.fill" color={color} />,
         }}
       />
       <Tabs.Screen
-        name="settings"
+        name="settings/index"
         options={{
           title: 'Settings',
           tabBarIcon: ({ color }) => <UiIconSymbol name="gearshape.fill" color={color} />,
         }}
       />
       <Tabs.Screen
-        name="staking"
+        name="staking/index"
         options={{
           title: 'Staking',
           tabBarIcon: ({ color }) => <UiIconSymbol name="chart.pie.fill" color={color} />,
         }}
       />
       <Tabs.Screen
-        name="demo"
+        name="demo/index"
         options={{
           title: 'Demo',
           tabBarIcon: ({ color }) => <UiIconSymbol name="ladybug.fill" color={color} />,
+        }}
+      />
+
+      {/* Explicitly hide the dynamic route from showing up as a bottom button */}
+      <Tabs.Screen
+        name="staking/[votePubkey]"
+        options={{
+          href: null,
         }}
       />
     </Tabs>
