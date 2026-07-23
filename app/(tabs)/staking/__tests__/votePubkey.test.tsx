@@ -107,7 +107,7 @@ describe('Staking [votePubkey] screen', () => {
       expect.objectContaining({
         newAccount: 'derivedStakeAcctAddr',
         base: 'user123',
-        lamports: 1_502_282_880n,
+        amount: 1_502_282_880n,
         space: 200,
       }),
     )

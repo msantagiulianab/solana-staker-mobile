@@ -43,17 +43,19 @@ export function createHandleStake(
       const voteAddress = address(votePubkey)
 
       // Convert SOL string to lamports using integer arithmetic.
-      // `BigInt('0.1')` throws `RangeError` in Hermes — approach avoids the
-      // branded `sol()`/`solToLamports()` chain which can pass a float
-      // through a BigInt constructor and crash the JS runtime.
+      // Avoids Hermes `BigInt('0.1')` crash and removes dependency on
+      // branded `sol()`/`solToLamports()` in the async hot path.
+      const parsedAmount = Number(amount)
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        Alert.alert('Error', 'Please enter a valid amount greater than 0.')
+        return
+      }
       const lamportsAmount = BigInt(
-        Math.floor(Number(amount) * 1_000_000_000),
+        Math.floor(parsedAmount * 1_000_000_000),
       )
       const totalLamports = lamportsAmount + RENT_EXEMPT_LAMPORTS
 
       // Deterministic seed — no keypair needed, no extra signer requirement.
-      // `createAddressWithSeed` derives a PDA-like address from (base, seed, program).
-      // Phantom's MWA bridge only needs to sign with the user's wallet.
       const seed = `stake:${Date.now()}`
       const stakeAddress = await createAddressWithSeed({
         baseAddress: userAddress,
@@ -61,16 +63,24 @@ export function createHandleStake(
         seed,
       })
 
-      // `as any` required — @solana-program/system's typed builder uses different
-      // property names than the raw SystemProgram createAccountWithSeed layout.
+      // `as any` required — @solana-program/system's typed builder expects
+      // `amount` (not `lamports`) and `space` as `number | bigint`.
+      console.log('[stakeTx] args:', {
+        userAddress,
+        stakeAddress: String(stakeAddress),
+        voteAddress: String(voteAddress),
+        seed,
+        totalLamports: totalLamports.toString(),
+        space: STAKE_ACCOUNT_SPACE,
+      })
+
       const createAccountIx = getCreateAccountWithSeedInstruction({
         payer: { address: userAddress },
         newAccount: stakeAddress,
         base: userAddress,
         seed,
-        lamports: totalLamports,
+        amount: totalLamports,
         space: STAKE_ACCOUNT_SPACE,
-        programAddress: STAKE_PROGRAM_ADDRESS,
       } as any)
 
       const initializeIx = getInitializeCheckedInstruction({
