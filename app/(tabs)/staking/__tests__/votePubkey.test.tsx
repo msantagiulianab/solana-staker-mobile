@@ -16,8 +16,8 @@ jest.mock('@wallet-ui/react-native-kit', () => ({
 }))
 
 jest.mock('@solana/kit', () => ({
-  generateKeyPairSigner: jest.fn(() =>
-    Promise.resolve({ address: 'stakeAcctAddress', keyPair: {}, signMessages: jest.fn(), signTransactions: jest.fn() }),
+  createAddressWithSeed: jest.fn(() =>
+    Promise.resolve('derivedStakeAcctAddr'),
   ),
   address: (s: string) => s,
   sol: (s: string) => s,
@@ -31,7 +31,7 @@ jest.mock('@solana-program/stake', () => ({
 }))
 
 jest.mock('@solana-program/system', () => ({
-  getCreateAccountInstruction: jest.fn(() => ({ __ix: 'create' })),
+  getCreateAccountWithSeedInstruction: jest.fn(() => ({ __ix: 'createWithSeed' })),
 }))
 
 jest.mock('@/components/ui/app-page', () => ({
@@ -43,16 +43,16 @@ jest.mock('@/hooks/use-color-scheme', () => ({
 }))
 
 import VotePubkeyScreen, { createHandleStake } from '../[votePubkey]'
-import { generateKeyPairSigner } from '@solana/kit'
+import { createAddressWithSeed } from '@solana/kit'
 import { getInitializeCheckedInstruction, getDelegateStakeInstruction } from '@solana-program/stake'
-import { getCreateAccountInstruction } from '@solana-program/system'
+import { getCreateAccountWithSeedInstruction } from '@solana-program/system'
 
 describe('Staking [votePubkey] screen', () => {
   beforeEach(() => {
     mockUseLocalSearchParams.mockReturnValue({ votePubkey: 'abc123' })
     jest.mocked(Alert.alert).mockClear()
-    jest.mocked(generateKeyPairSigner).mockClear()
-    jest.mocked(getCreateAccountInstruction).mockClear()
+    jest.mocked(createAddressWithSeed).mockClear()
+    jest.mocked(getCreateAccountWithSeedInstruction).mockClear()
     jest.mocked(getInitializeCheckedInstruction).mockClear()
     jest.mocked(getDelegateStakeInstruction).mockClear()
   })
@@ -104,12 +104,17 @@ describe('Staking [votePubkey] screen', () => {
     const handleStake = createHandleStake({ address: 'user123' }, '1.5', 'voteAddrABC', mockSend)
     await handleStake()
 
-    expect(generateKeyPairSigner).toHaveBeenCalledTimes(1)
-    expect(getCreateAccountInstruction).toHaveBeenCalledWith(
-      expect.objectContaining({ lamports: 1_502_282_880n, space: 200 }),
+    expect(createAddressWithSeed).toHaveBeenCalledTimes(1)
+    expect(getCreateAccountWithSeedInstruction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        newAccount: 'derivedStakeAcctAddr',
+        base: 'user123',
+        lamports: 1_502_282_880n,
+        space: 200,
+      }),
     )
     expect(getInitializeCheckedInstruction).toHaveBeenCalledWith(
-      expect.objectContaining({ stake: 'stakeAcctAddress', stakeAuthority: 'user123', withdrawAuthority: 'user123' }),
+      expect.objectContaining({ stake: 'derivedStakeAcctAddr', stakeAuthority: 'user123', withdrawAuthority: 'user123' }),
     )
     expect(getDelegateStakeInstruction).toHaveBeenCalledWith(
       expect.objectContaining({ vote: 'voteAddrABC', stakeAuthority: 'user123' }),

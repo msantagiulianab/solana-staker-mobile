@@ -5,13 +5,13 @@ import { AppPage } from '@/components/ui/app-page'
 import { AppView } from '@/components/ui/app-view'
 import { AppText } from '@/components/ui/app-text'
 import { useMobileWallet } from '@wallet-ui/react-native-kit'
-import { address, generateKeyPairSigner, sol, solToLamports } from '@solana/kit'
+import { address, createAddressWithSeed, sol, solToLamports } from '@solana/kit'
 import {
   getDelegateStakeInstruction,
   getInitializeCheckedInstruction,
   STAKE_PROGRAM_ADDRESS,
 } from '@solana-program/stake'
-import { getCreateAccountInstruction } from '@solana-program/system'
+import { getCreateAccountWithSeedInstruction } from '@solana-program/system'
 
 const STAKE_ACCOUNT_SPACE = 200
 const RENT_EXEMPT_LAMPORTS = 2_282_880n
@@ -39,20 +39,32 @@ export function createHandleStake(
     }
 
     try {
-      const stakeKeyPair = await generateKeyPairSigner()
       const userAddress = address(account.address)
-      const stakeAddress = address(stakeKeyPair.address)
       const voteAddress = address(votePubkey)
       const lamportsAmount = solToLamports(sol(amount))
       const totalLamports = lamportsAmount + RENT_EXEMPT_LAMPORTS
 
-      const createAccountIx = getCreateAccountInstruction({
-        payer: { address: userAddress } as any,
-        newAccount: stakeKeyPair as any,
+      // Deterministic seed — no keypair needed, no extra signer requirement.
+      // `createAddressWithSeed` derives a PDA-like address from (base, seed, program).
+      // Phantom's MWA bridge only needs to sign with the user's wallet.
+      const seed = `stake:${Date.now()}`
+      const stakeAddress = await createAddressWithSeed({
+        baseAddress: userAddress,
+        programAddress: STAKE_PROGRAM_ADDRESS,
+        seed,
+      })
+
+      // `as any` required — @solana-program/system's typed builder uses different
+      // property names than the raw SystemProgram createAccountWithSeed layout.
+      const createAccountIx = getCreateAccountWithSeedInstruction({
+        payer: { address: userAddress },
+        newAccount: stakeAddress,
+        base: userAddress,
+        seed,
         lamports: totalLamports,
         space: STAKE_ACCOUNT_SPACE,
         programAddress: STAKE_PROGRAM_ADDRESS,
-      })
+      } as any)
 
       const initializeIx = getInitializeCheckedInstruction({
         stake: stakeAddress as any,
