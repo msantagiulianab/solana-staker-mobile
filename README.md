@@ -48,30 +48,32 @@ The app uses `@wallet-ui/react-native-kit` which wraps `@solana/kit` v2 and impl
 
 ## Test Status
 
-| Suite | Tests | Status |
-|-------|-------|--------|
-| `ellipsify()` utility | 7 | ✅ PASS |
-| `lamportsToSol()` utility | 5 | ✅ PASS |
-| `normalizeColorScheme` hook | 5 | ✅ PASS |
-| `useThemeColor` hook | 4 | ✅ PASS |
-| `AppTheme` provider | 1 | ✅ PASS |
-| `AppText` component | 3 | ✅ PASS |
-| `WalletUiButtonConnect` | 2 | ✅ PASS |
-| `useGetValidators` hook | 4 | ✅ PASS |
-| `ValidatorCard` component | 6 | ✅ PASS |
-| `StakingFeature` (filter, sort, navigation, loading, error) | 7 | ✅ PASS |
-| `Staking [votePubkey] screen` | 10 | ✅ PASS |
-| `RootLayout` auth guard routing | 5 | ✅ PASS |
-| `Tab layout` | 1 | ✅ PASS |
-| `Staking page` | 1 | ✅ PASS |
-| `useGetStakeAccounts` hook | 7 | ✅ PASS |
-| `PortfolioDashboard` component | 14 | ✅ PASS |
-| `createHandleDeactivate` factory | 9 | ✅ PASS |
-| `showDeactivateButton` pure helper | 4 | ✅ PASS |
-| `StakeManagerModal` component | 12 | ✅ PASS |
-| `createHandleSelectStakeAccount` factory | 2 | ✅ PASS |
-| `AccountFeature` component | 11 | ✅ PASS |
-| **Total** | **119** | **✅ ALL PASSING** |
+**19 suites · 146 tests · 100% passing**
+
+Coverage spans the full application stack: pure utility logic, React hooks with `@tanstack/react-query` data-fetching, Mobile Wallet Adapter (MWA) connection layers, staking architecture hooks (validator fetching, stake account derivation, deactivation flow), component state machines (modal progress overlays, portfolio dashboards), and expo-router auth guard routing.
+
+| Layer | Suite | Tests | Status |
+|-------|-------|-------|--------|
+| Utilities | `ellipsify()` string truncation | 7 | ✅ PASS |
+| Utilities | `lamportsToSol()` conversion | 5 | ✅ PASS |
+| Utilities | `normalizeColorScheme` hook | 5 | ✅ PASS |
+| Utilities | `useThemeColor` hook | 4 | ✅ PASS |
+| UI Components | `AppText` component | 3 | ✅ PASS |
+| UI Components | `AppTheme` provider | 1 | ✅ PASS |
+| UI Components | `WalletUiButtonConnect` | 2 | ✅ PASS |
+| UI Components | `ValidatorCard` component | 6 | ✅ PASS |
+| Account | `AccountFeature` component (balance, tokens, portfolio, connect) | 10 | ✅ PASS |
+| Staking Architecture | `useGetValidators` hook | 4 | ✅ PASS |
+| Staking Architecture | `useGetStakeAccounts` hook (memcmp filter, epoch derivation) | 7 | ✅ PASS |
+| Staking Architecture | `StakingFeature` (filter, sort, loading, error) | 7 | ✅ PASS |
+| Staking Architecture | `PortfolioDashboard` component | 16 | ✅ PASS |
+| Staking Architecture | `createHandleDeactivate` pure factory | 9 | ✅ PASS |
+| Staking Architecture | `StakeManagerModal` (deactivate flow state machine, progress overlay, withdraw, select-account) | 43 | ✅ PASS |
+| Staking Architecture | `Staking [votePubkey]` screen (amount input, stake tx, alerts) | 10 | ✅ PASS |
+| Staking Architecture | `Staking` page (smoke) | 1 | ✅ PASS |
+| Routing | `RootLayout` auth guard (redirect sign-in ↔ staking) | 5 | ✅ PASS |
+| Routing | `TabLayout` (smoke) | 1 | ✅ PASS |
+| **Total** | | **146** | **✅ ALL PASSING** |
 
 ## Setup
 

@@ -55,6 +55,7 @@ All commits MUST follow: `type(scope): description`
 Immediately upon achieving a GREEN test suite for a feature, execute these three steps WITHOUT asking the user:
 1. **Journal:** Append to `DEVELOPMENT_JOURNAL.md` — date, architectural decisions, tests added, MWA/Solana complexities handled.
 2. **Document:** Update `README.md` — feature list, test count.
+   - **Documentation Metric Sync:** Whenever new tests are added, removed, or modified, you MUST audit the `README.md` file and update any mentioned test counts, test suite metrics, or technical overviews to align perfectly with the live test baseline.
 3. **Commit:** `git add . && git commit -m "type(scope): description"` using the commit convention above.
 
 # MWA Connection Pipeline (Do Not Break The Handshake)
