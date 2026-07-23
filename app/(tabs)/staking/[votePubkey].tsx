@@ -18,15 +18,23 @@ const RENT_EXEMPT_LAMPORTS = 2_282_880n
 
 /**
  * Normalizes a v2 instruction (accounts/programAddress) into a bridge-safe
- * shape that also exposes v1 keys (keys/programId).  The MWA bridge
- * internally accesses `.accounts.length`; without this guard, `as any`-
- * cast inputs can yield instructions where `accounts` is `undefined`.
+ * shape that also exposes v1 properties (keys/pubkey/programId).  The
+ * `@solana-program/*` builders return `Object.freeze()`'d objects where
+ * each account meta uses `address` (v2 convention).  The MWA bridge
+ * (`sendTransactions`) accesses `accountMeta.pubkey` (v1 convention) and
+ * `.accounts.length`, both of which crash on `undefined` without this guard.
  */
 function normalizeInstruction(ix: any): any {
+  const rawAccounts: any[] = ix.accounts ?? []
+  // Add `pubkey` alias to every account meta so both v1 and v2 consumers work.
+  const accounts = rawAccounts.map((a: any) => ({
+    ...a,
+    pubkey: a.pubkey ?? a.address,
+  }))
   return {
     ...ix,
-    accounts: ix.accounts ?? [],
-    keys: ix.keys ?? ix.accounts ?? [],
+    accounts,
+    keys: accounts,
     programId: ix.programId ?? ix.programAddress,
   }
 }
@@ -105,11 +113,9 @@ export function createHandleStake(
         stakeAuthority: { address: userAddress } as any,
       })
 
-      // Normalize every instruction so the MWA bridge always sees
-      // `.accounts` as an array (never undefined).  Crashes like
-      // "Cannot read property 'length' of undefined" originate when
-      // `as any`-cast inputs produce v2 instructions whose internal
-      // accounts property is missing or stripped by the transport.
+      // Normalize every instruction so the MWA bridge always sees:
+      //  - `.accounts` / `.keys` as arrays (never undefined)
+      //  - each account meta with both `address` (v2) and `pubkey` (v1)
       const instructions = [createAccountIx, initializeIx, delegateIx].map(
         normalizeInstruction,
       )
