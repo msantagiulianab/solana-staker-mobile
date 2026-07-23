@@ -43,8 +43,6 @@ export function createHandleStake(
       const voteAddress = address(votePubkey)
 
       // Convert SOL string to lamports using integer arithmetic.
-      // Avoids Hermes `BigInt('0.1')` crash and removes dependency on
-      // branded `sol()`/`solToLamports()` in the async hot path.
       const parsedAmount = Number(amount)
       if (isNaN(parsedAmount) || parsedAmount <= 0) {
         Alert.alert('Error', 'Please enter a valid amount greater than 0.')
@@ -63,8 +61,6 @@ export function createHandleStake(
         seed,
       })
 
-      // `as any` required — @solana-program/system's typed builder expects
-      // `amount` (not `lamports`) and `space` as `number | bigint`.
       console.log('[stakeTx] args:', {
         userAddress,
         stakeAddress: String(stakeAddress),
@@ -83,9 +79,12 @@ export function createHandleStake(
         space: STAKE_ACCOUNT_SPACE,
       } as any)
 
+      // `stakeAuthority` expects `TransactionSigner` ({ address: Address }),
+      // not a raw `Address` string. Passing a bare Address causes `.address`
+      // to be `undefined`, crashing the builder on `.length` access.
       const initializeIx = getInitializeCheckedInstruction({
         stake: stakeAddress as any,
-        stakeAuthority: userAddress as any,
+        stakeAuthority: { address: userAddress } as any,
         withdrawAuthority: userAddress as any,
       })
 
@@ -93,7 +92,7 @@ export function createHandleStake(
         stake: stakeAddress as any,
         vote: voteAddress as any,
         unused: userAddress as any,
-        stakeAuthority: userAddress as any,
+        stakeAuthority: { address: userAddress } as any,
       })
 
       const instructions = [createAccountIx, initializeIx, delegateIx]

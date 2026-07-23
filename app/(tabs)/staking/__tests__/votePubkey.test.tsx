@@ -112,10 +112,17 @@ describe('Staking [votePubkey] screen', () => {
       }),
     )
     expect(getInitializeCheckedInstruction).toHaveBeenCalledWith(
-      expect.objectContaining({ stake: 'derivedStakeAcctAddr', stakeAuthority: 'user123', withdrawAuthority: 'user123' }),
+      expect.objectContaining({
+        stake: 'derivedStakeAcctAddr',
+        stakeAuthority: { address: 'user123' },
+        withdrawAuthority: 'user123',
+      }),
     )
     expect(getDelegateStakeInstruction).toHaveBeenCalledWith(
-      expect.objectContaining({ vote: 'voteAddrABC', stakeAuthority: 'user123' }),
+      expect.objectContaining({
+        vote: 'voteAddrABC',
+        stakeAuthority: { address: 'user123' },
+      }),
     )
     expect(mockSend).toHaveBeenCalledTimes(1)
   })
