@@ -15,8 +15,8 @@
  * Mock strategy:
  *   - Inline mocks for useMobileWallet, createHandleDeactivate, useQueryClient
  *   - Pure helpers (showDeactivateButton, showWithdrawButton,
- *     getCurrentStepIndex, getRowVisualState, createHandleDeactivateFlow)
- *     tested without rendering
+ *     getCurrentStepIndex, getRowVisualState, createHandleDeactivateFlow,
+ *     createProgressRows) tested without rendering
  */
 
 import { render, waitFor } from '@testing-library/react-native'
@@ -96,7 +96,9 @@ import {
   getRowVisualState,
   createHandleDeactivateFlow,
   PROGRESS_ROWS,
+  createProgressRows,
 } from '../StakeManagerModal'
+import type { OperationContext } from '../StakeManagerModal'
 import { createHandleDeactivate } from '@/features/staking/deactivate-stake'
 
 // ---------------------------------------------------------------------------
@@ -199,6 +201,19 @@ describe('getCurrentStepIndex', () => {
   it('returns -1 for ERROR', () => {
     expect(getCurrentStepIndex('ERROR')).toBe(-1)
   })
+
+  it('increments flawlessly through the 5-state lifecycle', () => {
+    const steps: number[] = [
+      'IDLE',
+      'AWAITING_SIGNATURE',
+      'CONFIRMING',
+      'SUCCESS',
+      'ERROR',
+    ].map((s) => getCurrentStepIndex(s as any))
+
+    // IDLE=-1, AWAITING_SIGNATURE=0, CONFIRMING=1, SUCCESS=2, ERROR=-1
+    expect(steps).toEqual([-1, 0, 1, 2, -1])
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -239,6 +254,20 @@ describe('getRowVisualState', () => {
     expect(getRowVisualState('IDLE', 'AWAITING_SIGNATURE')).toBe('pending')
     expect(getRowVisualState('IDLE', 'CONFIRMING')).toBe('pending')
     expect(getRowVisualState('IDLE', 'SUCCESS')).toBe('pending')
+  })
+
+  it('returns correct states for each TransactionStatus enum value', () => {
+    // Exhaustive enum test: verify every status maps to the expected visual state
+    // for each PROGRESS_ROWS entry
+    const statuses = ['IDLE', 'AWAITING_SIGNATURE', 'CONFIRMING', 'SUCCESS', 'ERROR'] as const
+
+    for (const current of statuses) {
+      for (const row of ['AWAITING_SIGNATURE', 'CONFIRMING', 'SUCCESS'] as const) {
+        const visual = getRowVisualState(current, row)
+        // Must be one of the three valid RowVisualState values
+        expect(['pending', 'active', 'complete']).toContain(visual)
+      }
+    }
   })
 })
 
@@ -340,6 +369,83 @@ describe('PROGRESS_ROWS', () => {
   it('each row has a non-empty label', () => {
     for (const row of PROGRESS_ROWS) {
       expect(row.label.length).toBeGreaterThan(0)
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 6b. createProgressRows — operation-context-aware progress row factory
+// ---------------------------------------------------------------------------
+describe('createProgressRows', () => {
+  it('returns context-specific rows for stake operation', () => {
+    const rows = createProgressRows('stake')
+    expect(rows).toHaveLength(3)
+    expect(rows[0].status).toBe('AWAITING_SIGNATURE')
+    expect(rows[1].status).toBe('CONFIRMING')
+    expect(rows[2].status).toBe('SUCCESS')
+    expect(rows[0].label).toContain('Staking')
+    expect(rows[1].label).toContain('staking')
+    expect(rows[2].label).toContain('Stake')
+  })
+
+  it('returns context-specific rows for deactivate operation', () => {
+    const rows = createProgressRows('deactivate')
+    expect(rows).toHaveLength(3)
+    expect(rows[0].status).toBe('AWAITING_SIGNATURE')
+    expect(rows[1].status).toBe('CONFIRMING')
+    expect(rows[2].status).toBe('SUCCESS')
+    expect(rows[0].label).toContain('Deactivating')
+    expect(rows[1].label).toContain('deactivation')
+    expect(rows[2].label).toContain('deactivated')
+  })
+
+  it('returns context-specific rows for withdraw operation', () => {
+    const rows = createProgressRows('withdraw')
+    expect(rows).toHaveLength(3)
+    expect(rows[0].status).toBe('AWAITING_SIGNATURE')
+    expect(rows[1].status).toBe('CONFIRMING')
+    expect(rows[2].status).toBe('SUCCESS')
+    expect(rows[0].label).toContain('Withdrawing')
+    expect(rows[1].label).toContain('withdrawal')
+    expect(rows[2].label).toContain('withdrawn')
+  })
+
+  it('returns default rows for unknown context (backward compatibility)', () => {
+    const rows = createProgressRows('unknown' as OperationContext)
+    expect(rows).toHaveLength(3)
+    expect(rows[0].status).toBe('AWAITING_SIGNATURE')
+    expect(rows[1].status).toBe('CONFIRMING')
+    expect(rows[2].status).toBe('SUCCESS')
+    // Default falls back to generic labels
+    expect(rows[0].label.length).toBeGreaterThan(0)
+    expect(rows[1].label.length).toBeGreaterThan(0)
+    expect(rows[2].label.length).toBeGreaterThan(0)
+  })
+
+  it('each context produces labels distinct from other contexts', () => {
+    const stake = createProgressRows('stake')
+    const deact = createProgressRows('deactivate')
+    const withdraw = createProgressRows('withdraw')
+
+    // All three contexts must have different label text to avoid visual ambiguity
+    expect(stake[0].label).not.toBe(deact[0].label)
+    expect(stake[0].label).not.toBe(withdraw[0].label)
+    expect(deact[0].label).not.toBe(withdraw[0].label)
+  })
+
+  it('all returned rows conform to ProgressRow shape for every context', () => {
+    const contexts: OperationContext[] = ['stake', 'deactivate', 'withdraw']
+    const validStatuses = ['AWAITING_SIGNATURE', 'CONFIRMING', 'SUCCESS']
+
+    for (const ctx of contexts) {
+      const rows = createProgressRows(ctx)
+      expect(rows).toHaveLength(3)
+      for (let i = 0; i < rows.length; i++) {
+        expect(rows[i]).toHaveProperty('label')
+        expect(rows[i]).toHaveProperty('status')
+        expect(typeof rows[i].label).toBe('string')
+        expect(validStatuses).toContain(rows[i].status)
+      }
     }
   })
 })

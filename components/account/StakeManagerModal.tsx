@@ -179,6 +179,61 @@ export function getRowVisualState(
 }
 
 // ---------------------------------------------------------------------------
+// Operation-context-aware progress row factory
+// ---------------------------------------------------------------------------
+
+/**
+ * Identifies which on-chain operation the progress overlay represents.
+ *
+ * - 'stake'      — delegating SOL to a validator
+ * - 'deactivate' — deactivating an existing stake account
+ * - 'withdraw'   — withdrawing rent-exempt lamports from an inactive stake
+ */
+export type OperationContext = 'stake' | 'deactivate' | 'withdraw'
+
+const PROGRESS_LABELS_BY_CONTEXT: Record<
+  OperationContext,
+  [string, string, string]
+> = {
+  stake: [
+    'Staking SOL — awaiting wallet signature...',
+    'Confirming staking transaction...',
+    'Stake delegation complete!',
+  ],
+  deactivate: [
+    'Deactivating stake — awaiting wallet signature...',
+    'Confirming deactivation transaction...',
+    'Stake deactivated successfully!',
+  ],
+  withdraw: [
+    'Withdrawing funds — awaiting wallet signature...',
+    'Confirming withdrawal transaction...',
+    'Funds withdrawn successfully!',
+  ],
+}
+
+/**
+ * Builds the three progress overlay rows (`ProgressRow[]`) for the given
+ * operation context. Each row maps to `AWAITING_SIGNATURE`, `CONFIRMING`,
+ * and `SUCCESS` respectively.
+ *
+ * Unknown contexts fall back to the default `PROGRESS_ROWS`.
+ */
+export function createProgressRows(context: OperationContext): ProgressRow[] {
+  const labels = PROGRESS_LABELS_BY_CONTEXT[context] as string[] | undefined
+
+  if (!labels) {
+    return PROGRESS_ROWS
+  }
+
+  return [
+    { label: labels[0], status: 'AWAITING_SIGNATURE' },
+    { label: labels[1], status: 'CONFIRMING' },
+    { label: labels[2], status: 'SUCCESS' },
+  ]
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 

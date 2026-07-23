@@ -19,6 +19,7 @@ The application integrates natively with external mobile wallet providers (such 
 - ✅ StakeManagerModal: tap-to-open from portfolio → view stake details + Deactivate Stake button (active/activating only)
 - ✅ Portfolio Dashboard wired into Account tab (displayed alongside balance + staking + tokens)
 - ✅ Real pull-to-refresh (invalidates react-query cache for balance + tokens)
+- ✅ Operation-context-aware progress overlays: `createProgressRows('stake' | 'deactivate' | 'withdraw')` factory produces distinct label sets for each transaction type
 - ⬜ Request devnet/testnet airdrops (hook ready, screen pending)
 - ⬜ Send SOL (hook ready, screen pending)
 - ⬜ Receive SOL (QR code + address)
@@ -48,9 +49,9 @@ The app uses `@wallet-ui/react-native-kit` which wraps `@solana/kit` v2 and impl
 
 ## Test Status
 
-**20 suites · 156 tests · 100% passing**
+**20 suites · 164 tests · 100% passing**
 
-Coverage spans the full application stack: pure utility logic, React hooks with `@tanstack/react-query` data-fetching, Mobile Wallet Adapter (MWA) connection layers, staking architecture hooks (validator fetching, stake account derivation, deactivation flow), component state machines (modal progress overlays, portfolio dashboards), and expo-router auth guard routing.
+Coverage spans the full application stack: pure utility logic, React hooks with `@tanstack/react-query` data-fetching, Mobile Wallet Adapter (MWA) connection layers, staking architecture hooks (validator fetching, stake account derivation, deactivation flow), component state machines (modal progress overlays, portfolio dashboards), operation-context-aware progress row factories, and expo-router auth guard routing.
 
 | Layer | Suite | Tests | Status |
 |-------|-------|-------|--------|
@@ -69,12 +70,12 @@ Coverage spans the full application stack: pure utility logic, React hooks with 
 | Staking Architecture | `PortfolioDashboard` component | 16 | ✅ PASS |
 | Staking Architecture | `createHandleDeactivate` pure factory | 9 | ✅ PASS |
 | Staking Architecture | `createHandleWithdraw` pure factory | 10 | ✅ PASS |
-| Staking Architecture | `StakeManagerModal` (deactivate flow state machine, progress overlay, withdraw, select-account) | 43 | ✅ PASS |
+| Staking Architecture | `StakeManagerModal` (tx state machine, progress overlay, withdraw, createProgressRows context factory) | 51 | ✅ PASS |
 | Staking Architecture | `Staking [votePubkey]` screen (amount input, stake tx, alerts) | 10 | ✅ PASS |
 | Staking Architecture | `Staking` page (smoke) | 1 | ✅ PASS |
 | Routing | `RootLayout` auth guard (redirect sign-in ↔ staking) | 5 | ✅ PASS |
 | Routing | `TabLayout` (smoke) | 1 | ✅ PASS |
-| **Total** | | **156** | **✅ ALL PASSING** |
+| **Total** | | **164** | **✅ ALL PASSING** |
 
 ## Setup
 
@@ -161,6 +162,7 @@ npm run dev
 │   │   ├── PortfolioDashboard.tsx       # UI component: FlatList of stake cards with state badges
 │   │   ├── staking-types.ts             # Shared types/labels/colors (breaks circular dependency)
 │   │   ├── deactivate-stake.ts          # Pure factory: createHandleDeactivate
+│   │   ├── withdraw-stake.ts            # Pure factory: createHandleWithdraw
 │   │   └── __tests__/
 │   ├── network/                  # Network provider + hooks
 │   │   ├── network-provider.tsx  # ClusterProvider (React Context)

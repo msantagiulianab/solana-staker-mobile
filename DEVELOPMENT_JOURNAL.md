@@ -1,5 +1,27 @@
 # Development Journal
 
+## 2026-07-23 — StakeManagerModal Progress State Machine Coverage
+
+### Architectural Decisions
+- **Operation-context-aware progress rows:** Extracted `createProgressRows(ctx: OperationContext)` pure factory that produces `ProgressRow[]` with context-specific labels for `'stake'`, `'deactivate'`, and `'withdraw'` operations. Each context has three distinct label strings that avoid visual ambiguity across the three transaction types.
+- **`OperationContext` type:** Union type `'stake' | 'deactivate' | 'withdraw'` exported for type-safe factory invocation. Unknown contexts fall back to the default `PROGRESS_ROWS` constant for backward compatibility.
+- **Enum-exhaustive testing:** Added a `getRowVisualState` test that iterates all `TransactionStatus` × all three `PROGRESS_ROWS` statuses and asserts the result is always one of `'pending' | 'active' | 'complete'`.
+- **5-state lifecycle test:** `getCurrentStepIndex` now has a single test that maps all five `TransactionStatus` values through the function and asserts `[-1, 0, 1, 2, -1]`.
+
+### Tests Added (8 new, 164 total)
+| Suite | Tests | Status |
+|-------|-------|--------|
+| `getCurrentStepIndex` 5-state lifecycle | 1 | ✅ |
+| `getRowVisualState` exhaustive enum | 1 | ✅ |
+| `createProgressRows` context factory | 6 | ✅ |
+| **StakeManagerModal total** | **51** (was 43) | ✅ |
+| **Full suite** | **164** (was 156) | ✅ |
+
+### Solana/Wallet Complexities
+- The `@solana/kit` and `@solana-program/stake` ESM import chain must be mocked inline before the dynamic import in the test file to prevent Jest from trying to resolve the native ESM modules.
+- The pre-existing TS error on line 304 (`createHandleWithdraw` returns `Promise<string | undefined>` but `createHandleDeactivateFlow` expects `() => void | Promise<void>`) remains a known type-mismatch between the withdraw factory signature and the deactivation flow wrapper — will be addressed in a follow-up type refactor.
+- Live Devnet smoke testing (Task 1) is pending — requires physical device or emulator with a Devnet-funded Phantom wallet.
+
 ## 2026-07-11 — Full Feature Implementation
 
 ### Architectural Decisions
