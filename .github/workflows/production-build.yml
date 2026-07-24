@@ -1,0 +1,65 @@
+name: Build Production APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build Android APK via EAS (Production)
+        id: build
+        run: |
+          eas build \
+            --platform android \
+            --profile production \
+            --non-interactive \
+            --wait \
+            --clear-cache \
+            --json > build-info.json
+
+      - name: Download APK artifact
+        run: |
+          BUILD_URL=$(jq -r '.[0].artifacts.buildUrl' build-info.json)
+          curl -L -o solana-staker-mobile.apk "$BUILD_URL"
+
+      - name: Delete existing production-release tag (if any)
+        continue-on-error: true
+        run: |
+          git push origin --delete production-release || true
+
+      - name: Create or update Production Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Production Release Build
+          tag_name: production-release
+          body: |
+            Production APK build triggered manually via workflow_dispatch.
+
+            **Commit:** ${{ github.sha }}
+            **Branch:** ${{ github.ref_name }}
+          files: solana-staker-mobile.apk
+          prerelease: false
+          make_latest: true
