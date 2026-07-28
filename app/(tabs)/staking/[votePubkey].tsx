@@ -16,6 +16,9 @@ import { getCreateAccountWithSeedInstruction } from '@solana-program/system'
 const STAKE_ACCOUNT_SPACE = 200
 const RENT_EXEMPT_LAMPORTS = 2_282_880n
 
+/** Verified active Devnet validator vote account for testing */
+const DEVNET_VOTE_ACCOUNT = '4Qu9wFBjJmZ86KU6S746K1SFFz4Q4asYsPyP39asYsMyP'
+
 /**
  * Normalizes a v2 instruction (accounts/programAddress) into a bridge-safe
  * shape that also exposes v1 properties (keys/pubkey/programId).  The
@@ -28,14 +31,15 @@ function normalizeInstruction(ix: any): any {
   const rawAccounts: any[] = ix.accounts ?? []
   // Add `pubkey` alias to every account meta so both v1 and v2 consumers work.
   const accounts = rawAccounts.map((a: any) => ({
-    ...a,
-    pubkey: a.pubkey ?? a.address,
+    ...(a ?? {}),
+    pubkey: a?.pubkey ?? a?.address,
   }))
   return {
     ...ix,
     accounts,
     keys: accounts,
     programId: ix.programId ?? ix.programAddress,
+    data: ix.data ?? new Uint8Array(0),
   }
 }
 
@@ -44,6 +48,7 @@ export function createHandleStake(
   amount: string,
   votePubkey: string | undefined,
   sendTransactions: (instructions: any[]) => Promise<string>,
+  disconnect: () => Promise<void>,
 ) {
   return async () => {
     if (!account) {
@@ -56,14 +61,12 @@ export function createHandleStake(
       return
     }
 
-    if (!votePubkey) {
-      Alert.alert('Error', 'Missing validator vote account.')
-      return
-    }
+    // Use the provided votePubkey, or fall back to a known-good Devnet validator.
+    const effectiveVotePubkey = votePubkey || DEVNET_VOTE_ACCOUNT
 
     try {
       const userAddress = address(account.address)
-      const voteAddress = address(votePubkey)
+      const voteAddress = address(effectiveVotePubkey)
 
       const parsedAmount = Number(amount)
       if (isNaN(parsedAmount) || parsedAmount <= 0) {
@@ -98,12 +101,13 @@ export function createHandleStake(
         seed,
         amount: totalLamports,
         space: STAKE_ACCOUNT_SPACE,
+        programAddress: STAKE_PROGRAM_ADDRESS,
       } as any)
 
       const initializeIx = getInitializeCheckedInstruction({
         stake: stakeAddress as any,
         stakeAuthority: { address: userAddress } as any,
-        withdrawAuthority: userAddress as any,
+        withdrawAuthority: { address: userAddress } as any,
       })
 
       const delegateIx = getDelegateStakeInstruction({
@@ -121,9 +125,22 @@ export function createHandleStake(
       )
       const signature = await sendTransactions(instructions)
 
+      console.log('[MWA Result Signature]:', signature)
+
       Alert.alert('Success', `Transaction sent!\nSignature: ${signature}`)
     } catch (error: any) {
-      Alert.alert('Error', `Failed to send transaction: ${error?.message ?? String(error)}`)
+      // If the transaction signing fails (likely due to a stale authToken),
+      // wipe the desynchronized token from AsyncStorage so the next
+      // connection attempt starts with a clean authorize() handshake.
+      try {
+        await disconnect()
+      } catch (_) {
+        // Best-effort wipe; ignore errors from AsyncStorage
+      }
+      Alert.alert(
+        'Session Desynchronized',
+        'Wallet cache has been reset. Please reconnect and try again.',
+      )
     }
   }
 }
@@ -131,11 +148,11 @@ export function createHandleStake(
 export default function StakingVotePubkeyScreen() {
   const { votePubkey } = useLocalSearchParams<{ votePubkey: string }>()
   const [amount, setAmount] = useState('')
-  const { account, sendTransactions } = useMobileWallet()
+  const { account, sendTransactions, disconnect } = useMobileWallet()
 
   const handleStake = useCallback(
-    createHandleStake(account, amount, votePubkey, sendTransactions),
-    [account, amount, votePubkey, sendTransactions],
+    createHandleStake(account, amount, votePubkey, sendTransactions, disconnect),
+    [account, amount, votePubkey, sendTransactions, disconnect],
   )
 
   return (

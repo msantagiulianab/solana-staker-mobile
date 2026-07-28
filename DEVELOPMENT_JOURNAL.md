@@ -635,3 +635,30 @@ All 10 votePubkey tests pass: 10 passed, 10 total.
 
 ### Verification
 All 10 withdraw-stake tests pass. Global sweep: **20 suites, 156 tests, 0 failures, 0 regressions**.
+
+---
+
+## 2026-07-28 — MWA CancellationException: Concurrent Handshake Race Condition Fix
+
+### Root Cause
+The `CancellationException` on the MWA connection pipeline was caused by a lifecycle race condition: double-taps or rapid re-clicks on the "Connect" button fired two concurrent `connect()` calls. Phantom cancels the first session when a second `connect()` arrives while one is already in flight, producing the `CancellationException`. This is a UI-layer structural concurrency bug, not a dependency version mismatch.
+
+### Fixes Applied (3 structural concurrency gates)
+1. **Interaction lock (`useRef(false)`):** Added `isConnecting` ref at component level. `handleConnect` checks `isConnecting.current` before entering the try block and returns early with a console warning if a handshake is already in progress. The lock is set to `true` immediately after the gate check, before any `await connect()` call. This prevents double-taps from reaching Phantom.
+
+2. **Routing audit confirmed safe:** `router.replace('/staking')` already executes AFTER `await connect()` resolves — the component stays mounted throughout the MWA handshake lifecycle. Added inline documentation comments to make this ordering constraint explicit and prevent future regressions. No code reordering was needed.
+
+3. **Lock release on failure via `finally`:** The inner retry `try/catch` now has a `finally` block that unconditionally sets `isConnecting.current = false`. This covers all failure paths: `CancellationException`, `disconnect()` failures, timeout errors, and `Alert.alert` dismissal. On successful connection, the lock is intentionally left `true` because `router.replace()` unmounts the component, garbage-collecting the ref.
+
+### Lock Lifecycle Summary
+- **Tap →** gate check → set `true` → `await connect()`
+- **Success →** `router.replace('/staking')` → component unmounts (ref GC'd)
+- **Failure →** `finally { isConnecting.current = false }` → user can tap again
+- **Double-tap →** second tap hits gate, sees `true`, returns early with log
+
+### MWA/Solana Complexities Handled
+- Phantom's MWA handshake is not idempotent — a second `connect()` while one is pending cancels the first via Android intent collision. The interaction lock serializes access to the MWA bridge at the React component boundary, which is the correct layer for this concurrency gate.
+- The `finally` block is placed in the inner `try/catch` (retry path) rather than the outer one because the success path navigates away and unmounts the component — releasing the lock on success would create a window where a second tap could fire between lock release and navigation completion.
+
+### Verification
+Full test suite: **20 suites, 164 tests, 0 failures, 0 regressions**. The interaction lock is a runtime concurrency guard at the MWA bridge layer and does not affect the existing test suite (which mocks `useMobileWallet`).

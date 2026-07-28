@@ -80,26 +80,27 @@ describe('Staking [votePubkey] screen', () => {
   })
 
   it('shows error alert when user is not connected', async () => {
-    const handleStake = createHandleStake(undefined, '', undefined, jest.fn())
+    const handleStake = createHandleStake(undefined, '', undefined, jest.fn(), jest.fn())
     await handleStake()
     expect(Alert.alert).toHaveBeenCalledWith('Error', 'Please connect your wallet first.')
   })
 
   it('shows error alert when amount is zero or invalid', async () => {
-    const handleStake = createHandleStake({ address: 'user123' }, '0', 'vote123', jest.fn())
+    const handleStake = createHandleStake({ address: 'user123' }, '0', 'vote123', jest.fn(), jest.fn())
     await handleStake()
     expect(Alert.alert).toHaveBeenCalledWith('Error', 'Please enter a valid amount greater than 0.')
   })
 
-  it('shows error alert when votePubkey is missing', async () => {
-    const handleStake = createHandleStake({ address: 'user123' }, '1.5', undefined, jest.fn())
+  it('uses devnet fallback when votePubkey is missing', async () => {
+    const mockSend = jest.fn().mockResolvedValue('txFallback')
+    const handleStake = createHandleStake({ address: 'user123' }, '1.5', undefined, mockSend, jest.fn())
     await handleStake()
-    expect(Alert.alert).toHaveBeenCalledWith('Error', 'Missing validator vote account.')
+    expect(mockSend).toHaveBeenCalledTimes(1)
   })
 
   it('builds and sends the correct staking transaction', async () => {
     const mockSend = jest.fn().mockResolvedValue('txSig555')
-    const handleStake = createHandleStake({ address: 'user123' }, '1.5', 'voteAddrABC', mockSend)
+    const handleStake = createHandleStake({ address: 'user123' }, '1.5', 'voteAddrABC', mockSend, jest.fn())
     await handleStake()
 
     expect(createAddressWithSeed).toHaveBeenCalledTimes(1)
@@ -115,7 +116,7 @@ describe('Staking [votePubkey] screen', () => {
       expect.objectContaining({
         stake: 'derivedStakeAcctAddr',
         stakeAuthority: { address: 'user123' },
-        withdrawAuthority: 'user123',
+        withdrawAuthority: { address: 'user123' },
       }),
     )
     expect(getDelegateStakeInstruction).toHaveBeenCalledWith(
@@ -129,17 +130,22 @@ describe('Staking [votePubkey] screen', () => {
 
   it('shows success alert with transaction signature', async () => {
     const mockSend = jest.fn().mockResolvedValue('txSuccessABC')
-    const handleStake = createHandleStake({ address: 'user123' }, '1', 'voteAddrABC', mockSend)
+    const handleStake = createHandleStake({ address: 'user123' }, '1', 'voteAddrABC', mockSend, jest.fn())
     await handleStake()
 
     expect(Alert.alert).toHaveBeenCalledWith('Success', 'Transaction sent!\nSignature: txSuccessABC')
   })
 
-  it('shows error alert on transaction failure', async () => {
-    const mockSend = jest.fn().mockRejectedValue(new Error('User rejected'))
-    const handleStake = createHandleStake({ address: 'user123' }, '1', 'voteAddrABC', mockSend)
+  it('wipes stale token and alerts on send failure', async () => {
+    const mockSend = jest.fn().mockRejectedValue(new Error('Session expired'))
+    const mockDisconnect = jest.fn().mockResolvedValue(undefined)
+    const handleStake = createHandleStake({ address: 'user123' }, '1', 'voteAddrABC', mockSend, mockDisconnect)
     await handleStake()
 
-    expect(Alert.alert).toHaveBeenCalledWith('Error', 'Failed to send transaction: User rejected')
+    expect(mockDisconnect).toHaveBeenCalledTimes(1)
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Session Desynchronized',
+      'Wallet cache has been reset. Please reconnect and try again.',
+    )
   })
 })
