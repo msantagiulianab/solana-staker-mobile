@@ -129,9 +129,28 @@ export function createHandleStake(
 
       Alert.alert('Success', `Transaction sent!\nSignature: ${signature}`)
     } catch (error: any) {
-      // If the transaction signing fails (likely due to a stale authToken),
-      // wipe the desynchronized token from AsyncStorage so the next
-      // connection attempt starts with a clean authorize() handshake.
+      const message: string = error?.message ?? String(error ?? '')
+      const isUserCancelled =
+        message.includes('cancelled by user') ||
+        message.includes('ERROR_LOCAL_ASSOCIATION_CANCELLED')
+
+      if (isUserCancelled) {
+        // The user pressed Android back immediately after confirming inside
+        // Phantom.  The MWA socket severed before the return intent could
+        // deliver the confirmation payload, but the transaction may have
+        // already been submitted on-chain.  Notify the user to check their
+        // wallet history instead of resetting the auth token.
+        Alert.alert(
+          'Transaction Pending',
+          'Please check your wallet history to confirm execution.',
+        )
+        return
+      }
+
+      // Any other error (e.g. stale authToken, RPC timeout, invalid blockhash)
+      // is treated as a session-desync.  Wipe the desynchronized token from
+      // AsyncStorage so the next connection attempt starts with a clean
+      // authorize() handshake.
       try {
         await disconnect()
       } catch (_) {

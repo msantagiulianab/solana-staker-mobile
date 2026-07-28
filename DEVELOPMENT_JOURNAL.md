@@ -662,3 +662,53 @@ The `CancellationException` on the MWA connection pipeline was caused by a lifec
 
 ### Verification
 Full test suite: **20 suites, 164 tests, 0 failures, 0 regressions**. The interaction lock is a runtime concurrency guard at the MWA bridge layer and does not affect the existing test suite (which mocks `useMobileWallet`).
+
+---
+
+## 2026-07-28 — User Cancellation Error Handling: MWA Back-Button Socket Sever
+
+### Root Cause
+When a user confirms a staking transaction inside Phantom and immediately presses the Android back button, the MWA WebSocket severs before the return intent delivers the confirmation payload to the app. This throws an unhandled `Local association cancelled by user` / `ERROR_LOCAL_ASSOCIATION_CANCELLED` rejection. Previously, the `catch` block treated ALL errors as stale-token session desyncs, wiping the auth token from AsyncStorage and showing "Session Desynchronized" — even though the transaction may have already been submitted on-chain.
+
+### Fix Applied
+In `app/(tabs)/staking/[votePubkey].tsx` `createHandleStake` factory, the `catch` block now discriminates between user cancellation and genuine session errors:
+
+```typescript
+const message: string = error?.message ?? String(error ?? '')
+const isUserCancelled =
+  message.includes('cancelled by user') ||
+  message.includes('ERROR_LOCAL_ASSOCIATION_CANCELLED')
+
+if (isUserCancelled) {
+  Alert.alert(
+    'Transaction Pending',
+    'Please check your wallet history to confirm execution.',
+  )
+  return // Do NOT wipe the auth token
+}
+```
+
+### Why Not Reset the Auth Token on Cancellation?
+The user's session is still valid — Phantom authorized the transaction and may have already submitted it to the network. Wiping `AsyncStorage` would force the user to reconnect unnecessarily. Instead, the app informs them that the transaction may be pending and directs them to check their wallet history.
+
+### Decision Flow
+| Error Message | Action |
+|---|---|
+| `"cancelled by user"` or `"ERROR_LOCAL_ASSOCIATION_CANCELLED"` | Alert "Transaction Pending" — do NOT disconnect |
+| Any other error (stale token, RPC timeout, etc.) | `disconnect()` + Alert "Session Desynchronized" |
+
+### Tests Added (2 tests)
+| Test | Status |
+|------|--------|
+| `shows pending alert on user cancellation (back button)` | ✅ |
+| `shows pending alert on ERROR_LOCAL_ASSOCIATION_CANCELLED code` | ✅ |
+
+Both tests assert that `Alert.alert` is called with `'Transaction Pending'` / `'Please check your wallet history to confirm execution.'` and that `mockDisconnect` is NOT called — confirming the auth token is preserved.
+
+### MWA/Solana Complexities Handled
+- The MWA bridge's `sendTransactions()` promise rejects with `"Local association cancelled by user"` when the socket closes before the return intent arrives. The error code `ERROR_LOCAL_ASSOCIATION_CANCELLED` may also appear in the message.
+- Transaction confirmation from Phantom is asynchronous — the wallet may have submitted the tx to the network before the socket closed. Informing the user to check their wallet history is the safest recovery path.
+- The pure factory pattern (`createHandleStake`) keeps this logic fully testable without rendering any component — both new tests are pure async function invocations with mock `sendTransactions` and `disconnect`.
+
+### Verification
+Full test suite: **20 suites, 166 tests, 0 failures, 0 regressions**. The existing 10 votePubkey tests continue to pass; the old `'wipes stale token and alerts on send failure'` test still uses a generic `Error('Session expired')` which does not match the cancellation string check, preserving the original behavior for non-cancellation errors.

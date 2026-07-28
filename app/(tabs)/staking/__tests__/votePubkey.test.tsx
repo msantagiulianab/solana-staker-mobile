@@ -148,4 +148,35 @@ describe('Staking [votePubkey] screen', () => {
       'Wallet cache has been reset. Please reconnect and try again.',
     )
   })
+
+  it('shows pending alert on user cancellation (back button)', async () => {
+    const mockSend = jest.fn().mockRejectedValue(
+      new Error('Local association cancelled by user'),
+    )
+    const mockDisconnect = jest.fn().mockResolvedValue(undefined)
+    const handleStake = createHandleStake({ address: 'user123' }, '1', 'voteAddrABC', mockSend, mockDisconnect)
+    await handleStake()
+
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Transaction Pending',
+      'Please check your wallet history to confirm execution.',
+    )
+    // Must NOT wipe the auth token — the session is still valid
+    expect(mockDisconnect).not.toHaveBeenCalled()
+  })
+
+  it('shows pending alert on ERROR_LOCAL_ASSOCIATION_CANCELLED code', async () => {
+    const mockSend = jest.fn().mockRejectedValue(
+      new Error('ERROR_LOCAL_ASSOCIATION_CANCELLED: socket closed'),
+    )
+    const mockDisconnect = jest.fn().mockResolvedValue(undefined)
+    const handleStake = createHandleStake({ address: 'user123' }, '1', 'voteAddrABC', mockSend, mockDisconnect)
+    await handleStake()
+
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Transaction Pending',
+      'Please check your wallet history to confirm execution.',
+    )
+    expect(mockDisconnect).not.toHaveBeenCalled()
+  })
 })

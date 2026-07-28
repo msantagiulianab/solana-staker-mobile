@@ -18,7 +18,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.solana_staker_mobile"
+      "package": "com.anonymous.solana_staker_mobile",
+      "allowBackup": false
     },
     "web": {
       "output": "static",
