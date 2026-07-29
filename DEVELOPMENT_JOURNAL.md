@@ -665,6 +665,67 @@ Full test suite: **20 suites, 164 tests, 0 failures, 0 regressions**. The intera
 
 ---
 
+## 2026-07-29 — Staking Transaction: Pending Modal Lifecycle Fix (Back-Button Stuck Modal)
+
+### Root Cause
+When a user pressed the Android back button while Phantom was asking for transaction confirmation, the MWA WebSocket would sever before the return intent delivered a payload. The `createHandleStake` catch block caught this and showed `Alert.alert('Transaction Pending', 'Please check your wallet history...')` — but no loading/pending state management existed. Additionally, there was no mechanism to close a pending modal on cancellation or error.
+
+The Alert "Transaction Pending" was misleading: a back-button cancellation means the transaction was NOT submitted on-chain. The correct behavior is to inform the user the transaction was cancelled and reset all UI state.
+
+### Fix Applied
+Three structural changes to `app/(tabs)/staking/[votePubkey].tsx`:
+
+1. **Added `isPending` state + transparent `Modal` overlay:** The `StakingVotePubkeyScreen` component now renders a `Modal` with `ActivityIndicator` and "Transaction Pending / Please confirm in your wallet" text, controlled by `isPending` state. The "Stake SOL" button is `disabled={isPending}` to prevent double-taps during an active transaction handshake.
+
+2. **Added `callbacks` parameter to `createHandleStake`:** The pure factory now accepts an optional 6th argument `{ onTransactionStart?, onTransactionFinished? }`. `onTransactionStart` fires right before `sendTransactions()`, showing the pending overlay. `onTransactionFinished` fires in `finally`, guaranteed to reset `isPending` to `false` on every exit path (success, cancellation, session error, unexpected throw).
+
+3. **Changed cancellation alert from "Transaction Pending" to "Transaction Cancelled":** The old code told users to "check your wallet history" on back-button cancellation — implying the transaction might have succeeded when it definitely did not. The new message is "The transaction was cancelled. Please try again when ready."
+
+### Decision Flow (Before vs After)
+| Path | Before | After |
+|------|--------|-------|
+| `sendTransactions()` succeeds | `Alert.alert('Success', ...)` | `onTransactionStart()` → tx → `onTransactionFinished()` + `Alert.alert('Success', ...)` |
+| User presses back (cancellation) | `Alert.alert('Transaction Pending', 'check wallet history...')` — modal stuck open | `onTransactionFinished()` → `Alert.alert('Transaction Cancelled', ...)` — modal closed, state reset |
+| Session error | `disconnect()` + `Alert.alert('Session Desynchronized', ...)` — modal stuck open | `onTransactionFinished()` → `disconnect()` + `Alert.alert('Session Desynchronized', ...)` — modal closed, state reset |
+
+### Callback Lifecycle Guarantee
+```
+onTransactionStart()  →  modal opens
+   ↓
+sendTransactions()
+   ↓
+   ├── resolve → Alert.alert('Success')  →  finally → onTransactionFinished() → modal closes
+   └── reject  → catch → Alert.alert(…)  →  finally → onTransactionFinished() → modal closes
+```
+
+The `finally` block is the single source of truth for loading state reset. Even if `disconnect()` throws inside the catch, `onTransactionFinished` still fires.
+
+### Tests Added (3 tests, 12→15 total for votePubkey suite)
+| Test | Status |
+|------|--------|
+| `calls onTransactionStart and onTransactionFinished on successful transaction` | ✅ |
+| `calls onTransactionStart then onTransactionFinished on cancellation (finally)` | ✅ |
+| `calls onTransactionStart then onTransactionFinished on session error (finally)` | ✅ |
+
+### Existing Tests Updated (2 tests renamed)
+| Before | After |
+|--------|-------|
+| `shows pending alert on user cancellation (back button)` | `shows cancellation alert on user cancellation (back button)` |
+| `shows pending alert on ERROR_LOCAL_ASSOCIATION_CANCELLED code` | `shows cancellation alert on ERROR_LOCAL_ASSOCIATION_CANCELLED code` |
+
+Both tests now assert `Alert.alert('Transaction Cancelled', 'The transaction was cancelled. Please try again when ready.')` instead of the old "Transaction Pending" / "check wallet history" message.
+
+### MWA/Solana Complexities Handled
+- **Pure factory callback injection:** `createHandleStake` is a pure factory tested without React rendering. The `callbacks` parameter enables state management injection (from React `useState` setters) without coupling the factory to React. Tests pass mock `jest.fn()` callbacks and assert they're called at the correct times.
+- **`finally` semantics in async generators:** The `finally` block always runs after `try` or `catch`, even if `return` is called inside `catch`. This guarantees `onTransactionFinished` fires on cancellation (which uses `return` to skip the non-cancellation fallthrough) and on session errors (which may `throw` from `disconnect()`).
+- **Modal transparency and `statusBarTranslucent`:** The `Modal` uses `transparent` + `statusBarTranslucent` to properly overlay on Android's status bar, preventing layout jumps when the modal appears/disappears.
+
+### Verification
+Full test suite: **20 suites, 169 tests, 0 failures, 0 regressions**. The votePubkey suite grew from 12 to 15 tests.
+
+### Commit
+`fix(staking): add pending modal with finally-guaranteed lifecycle cleanup`
+
 ## 2026-07-29 — MWA Connection: Remove Automatic Retry on Failure (Touch Token Invalidation Fix)
 
 ### Root Cause

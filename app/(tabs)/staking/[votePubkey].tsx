@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react'
-import { Alert, Pressable, StyleSheet, TextInput } from 'react-native'
+import { ActivityIndicator, Alert, Modal, Pressable, StyleSheet, TextInput } from 'react-native'
 import { useLocalSearchParams } from 'expo-router'
 import { AppPage } from '@/components/ui/app-page'
 import { AppView } from '@/components/ui/app-view'
@@ -49,6 +49,10 @@ export function createHandleStake(
   votePubkey: string | undefined,
   sendTransactions: (instructions: any[]) => Promise<string>,
   disconnect: () => Promise<void>,
+  callbacks?: {
+    onTransactionStart?: () => void
+    onTransactionFinished?: () => void
+  },
 ) {
   return async () => {
     if (!account) {
@@ -123,6 +127,12 @@ export function createHandleStake(
       const instructions = [createAccountIx, initializeIx, delegateIx].map(
         normalizeInstruction,
       )
+
+      // Signal the UI to show the pending overlay BEFORE invoking MWA.
+      // If sendTransactions rejects (cancellation, timeout, etc.), the
+      // finally block guarantees onTransactionFinished fires to reset UI.
+      callbacks?.onTransactionStart?.()
+
       const signature = await sendTransactions(instructions)
 
       console.log('[MWA Result Signature]:', signature)
@@ -135,14 +145,13 @@ export function createHandleStake(
         message.includes('ERROR_LOCAL_ASSOCIATION_CANCELLED')
 
       if (isUserCancelled) {
-        // The user pressed Android back immediately after confirming inside
-        // Phantom.  The MWA socket severed before the return intent could
-        // deliver the confirmation payload, but the transaction may have
-        // already been submitted on-chain.  Notify the user to check their
-        // wallet history instead of resetting the auth token.
+        // The user pressed Android back or dismissed Phantom's confirmation
+        // dialog. The MWA WebSocket severs before the return intent delivers
+        // a payload. Close the pending overlay and inform the user — the
+        // transaction was NOT submitted on-chain.
         Alert.alert(
-          'Transaction Pending',
-          'Please check your wallet history to confirm execution.',
+          'Transaction Cancelled',
+          'The transaction was cancelled. Please try again when ready.',
         )
         return
       }
@@ -160,6 +169,11 @@ export function createHandleStake(
         'Session Desynchronized',
         'Wallet cache has been reset. Please reconnect and try again.',
       )
+    } finally {
+      // Always reset the loading overlay on every exit path — success,
+      // cancellation, session error, or unexpected throw.  This guarantees
+      // the UI never remains stuck in the "pending" state.
+      callbacks?.onTransactionFinished?.()
     }
   }
 }
@@ -167,10 +181,14 @@ export function createHandleStake(
 export default function StakingVotePubkeyScreen() {
   const { votePubkey } = useLocalSearchParams<{ votePubkey: string }>()
   const [amount, setAmount] = useState('')
+  const [isPending, setIsPending] = useState(false)
   const { account, sendTransactions, disconnect } = useMobileWallet()
 
   const handleStake = useCallback(
-    createHandleStake(account, amount, votePubkey, sendTransactions, disconnect),
+    createHandleStake(account, amount, votePubkey, sendTransactions, disconnect, {
+      onTransactionStart: () => setIsPending(true),
+      onTransactionFinished: () => setIsPending(false),
+    }),
     [account, amount, votePubkey, sendTransactions, disconnect],
   )
 
@@ -204,6 +222,7 @@ export default function StakingVotePubkeyScreen() {
           <Pressable
             testID="stake-button"
             style={styles.stakeButton}
+            disabled={isPending}
             onPress={handleStake}
           >
             <AppText type="defaultSemiBold" style={styles.stakeButtonText}>
@@ -211,6 +230,25 @@ export default function StakingVotePubkeyScreen() {
             </AppText>
           </Pressable>
         </AppView>
+
+        <Modal
+          visible={isPending}
+          transparent
+          animationType="fade"
+          statusBarTranslucent
+        >
+          <AppView style={styles.modalOverlay}>
+            <AppView style={styles.modalContent}>
+              <ActivityIndicator size="large" color="#9945FF" />
+              <AppText type="defaultSemiBold" style={styles.modalText}>
+                Transaction Pending
+              </AppText>
+              <AppText style={styles.modalSubText}>
+                Please confirm in your wallet
+              </AppText>
+            </AppView>
+          </AppView>
+        </Modal>
       </AppView>
     </AppPage>
   )
@@ -262,5 +300,28 @@ const styles = StyleSheet.create({
   stakeButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    minWidth: 200,
+  },
+  modalText: {
+    marginTop: 16,
+    fontSize: 18,
+  },
+  modalSubText: {
+    marginTop: 8,
+    color: '#666',
+    fontSize: 14,
   },
 })

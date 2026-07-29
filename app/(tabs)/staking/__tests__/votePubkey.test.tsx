@@ -149,7 +149,7 @@ describe('Staking [votePubkey] screen', () => {
     )
   })
 
-  it('shows pending alert on user cancellation (back button)', async () => {
+  it('shows cancellation alert on user cancellation (back button)', async () => {
     const mockSend = jest.fn().mockRejectedValue(
       new Error('Local association cancelled by user'),
     )
@@ -158,14 +158,14 @@ describe('Staking [votePubkey] screen', () => {
     await handleStake()
 
     expect(Alert.alert).toHaveBeenCalledWith(
-      'Transaction Pending',
-      'Please check your wallet history to confirm execution.',
+      'Transaction Cancelled',
+      'The transaction was cancelled. Please try again when ready.',
     )
     // Must NOT wipe the auth token — the session is still valid
     expect(mockDisconnect).not.toHaveBeenCalled()
   })
 
-  it('shows pending alert on ERROR_LOCAL_ASSOCIATION_CANCELLED code', async () => {
+  it('shows cancellation alert on ERROR_LOCAL_ASSOCIATION_CANCELLED code', async () => {
     const mockSend = jest.fn().mockRejectedValue(
       new Error('ERROR_LOCAL_ASSOCIATION_CANCELLED: socket closed'),
     )
@@ -174,9 +174,71 @@ describe('Staking [votePubkey] screen', () => {
     await handleStake()
 
     expect(Alert.alert).toHaveBeenCalledWith(
-      'Transaction Pending',
-      'Please check your wallet history to confirm execution.',
+      'Transaction Cancelled',
+      'The transaction was cancelled. Please try again when ready.',
     )
     expect(mockDisconnect).not.toHaveBeenCalled()
+  })
+
+  it('calls onTransactionStart and onTransactionFinished on successful transaction', async () => {
+    const mockSend = jest.fn().mockResolvedValue('txSuccess')
+    const onStart = jest.fn()
+    const onFinished = jest.fn()
+    const handleStake = createHandleStake(
+      { address: 'user123' },
+      '1',
+      'voteAddrABC',
+      mockSend,
+      jest.fn(),
+      { onTransactionStart: onStart, onTransactionFinished: onFinished },
+    )
+    await handleStake()
+
+    expect(onStart).toHaveBeenCalledTimes(1)
+    expect(onFinished).toHaveBeenCalledTimes(1)
+  })
+
+  it('calls onTransactionStart then onTransactionFinished on cancellation (finally)', async () => {
+    const mockSend = jest.fn().mockRejectedValue(
+      new Error('Local association cancelled by user'),
+    )
+    const onStart = jest.fn()
+    const onFinished = jest.fn()
+    const handleStake = createHandleStake(
+      { address: 'user123' },
+      '1',
+      'voteAddrABC',
+      mockSend,
+      jest.fn(),
+      { onTransactionStart: onStart, onTransactionFinished: onFinished },
+    )
+    await handleStake()
+
+    // onTransactionStart fires BEFORE sendTransactions, so it runs even
+    // though sendTransactions rejects. This ensures the pending overlay
+    // appears while Phantom processes the request.
+    expect(onStart).toHaveBeenCalledTimes(1)
+    // onTransactionFinished MUST be called (via finally) to reset UI state.
+    expect(onFinished).toHaveBeenCalledTimes(1)
+  })
+
+  it('calls onTransactionStart then onTransactionFinished on session error (finally)', async () => {
+    const mockSend = jest.fn().mockRejectedValue(new Error('Session expired'))
+    const mockDisconnect = jest.fn().mockResolvedValue(undefined)
+    const onStart = jest.fn()
+    const onFinished = jest.fn()
+    const handleStake = createHandleStake(
+      { address: 'user123' },
+      '1',
+      'voteAddrABC',
+      mockSend,
+      mockDisconnect,
+      { onTransactionStart: onStart, onTransactionFinished: onFinished },
+    )
+    await handleStake()
+
+    expect(onStart).toHaveBeenCalledTimes(1)
+    expect(onFinished).toHaveBeenCalledTimes(1)
+    expect(mockDisconnect).toHaveBeenCalledTimes(1)
   })
 })
