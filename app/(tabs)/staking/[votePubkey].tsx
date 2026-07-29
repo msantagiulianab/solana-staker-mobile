@@ -145,8 +145,16 @@ export function createHandleStake(
         newAccount: stakeAddress,
         base: userAddress,
         seed,
-        amount: totalLamports,
-        space: STAKE_ACCOUNT_SPACE,
+        // Explicit BigInt cast prevents serialization corruption when
+        // normalizeInstruction spreads the instruction and the MWA
+        // bridge serializes it for Phantom's simulation engine.
+        // Without this, some JS engines may coerce bigint → string,
+        // causing Phantom's simulator to hang indefinitely.
+        amount: BigInt(totalLamports as any),
+        // Explicit Number cast ensures STAKE_ACCOUNT_SPACE is a
+        // primitive number, not a branded nominal type that may
+        // serialize as an object literal.
+        space: Number(STAKE_ACCOUNT_SPACE),
         programAddress: STAKE_PROGRAM_ADDRESS,
       } as any)
 

@@ -665,6 +665,27 @@ Full test suite: **20 suites, 164 tests, 0 failures, 0 regressions**. The intera
 
 ---
 
+## 2026-07-29 — Serialization Fix: Explicit Primitive Casts for totalLamports and space
+
+### Root Cause
+The console log `[stakeTx] args: { totalLamports: '12282880' ... }` showed `totalLamports` being rendered as a string in the log output. This stringification propagated through `normalizeInstruction()` and into the MWA bridge serialization layer, where Phantom's simulation engine received a string for an expected `u64` bigint field. React Native's Hermes engine handles `bigint` differently from V8 — under certain serialization paths (spread operators and `Object.freeze` from `@solana-program/*` instruction builders), a `bigint` value can lose its primitive type identity and serialize as a string. Phantom's simulator then hangs indefinitely trying to parse a string as a lamport amount.
+
+### Fix Applied
+Added two explicit primitive casts at the instruction construction boundary in `app/(tabs)/staking/[votePubkey].tsx`:
+
+1. **`amount: BigInt(totalLamports as any)`** — Forces a fresh bigint primitive from the existing `totalLamports` bigint. The `as any` bypasses TypeScript's nominal branded type (`Lamports`) from `@solana/kit`, but at runtime this is a no-op that preserves the 64-bit integer value. The explicit `BigInt()` constructor call guarantees the value is a genuine primitive, not a branded wrapper that could serialize as a string.
+
+2. **`space: Number(STAKE_ACCOUNT_SPACE)`** — Explicitly wraps the `const STAKE_ACCOUNT_SPACE = 200` in `Number()` to ensure it's a primitive number and not susceptible to any branded type interference from the instruction builder's expected types.
+
+### Why Not Fix It Earlier In the Pipeline?
+`totalLamports` on line 125 is already a `bigint` primitive (`lamportsAmount + RENT_EXEMPT_LAMPORTS`). The issue is that `getCreateAccountWithSeedInstruction` from `@solana-program/system` expects branded nominal types. When we pass through `as any` on the outer object but don't explicitly re-cast the fields individually, some serialization paths may lose the primitive type information. The fix adds the casts at the last possible point — right before the value enters the instruction builder.
+
+### Test Baseline
+20 suites, 169 tests, 0 failures, 0 regressions. The existing test for `getCreateAccountWithSeedInstruction` already asserts `amount: 1_502_282_880n` (a bigint), confirming the cast produces the correct bigint value.
+
+### Commit
+`fix(staking): explicit BigInt/Number casts to prevent Phantom simulator hang`
+
 ## 2026-07-29 — Cluster Confirmation & RPC Audit: confirmTransaction Polling + Identity URI Fix
 
 ### Root Cause
