@@ -665,6 +665,34 @@ Full test suite: **20 suites, 164 tests, 0 failures, 0 regressions**. The intera
 
 ---
 
+## 2026-07-29 — Account Tab: Deferred MWA Connection + Stake Decode Pre-filter
+
+### Root Cause
+Two separate issues were causing side-effects on Account tab navigation:
+
+1. **Eager MWA connection redirect on app boot:** `app/_layout.tsx`'s `useEffect` guard was checking `isAuthenticated && !inTabsGroup` → redirect to `/staking`. On app boot, `MobileWalletProvider` asynchronously restores the cached account from `AsyncStorage`, firing `isAuthenticated: false → true` while `segments` is still `undefined` (root path `/`). The `!inTabsGroup` check was `true` for the root path, causing an immediate redirect to `/staking` — including when the user navigated to the Account tab and the tab mount triggered the auth guard re-evaluation.
+
+2. **Stake decode warning for uninitialized accounts:** `parseStakeAccount` was attempting to decode every account returned by `getProgramAccounts`, including accounts with zero/inadequate data (empty placeholder accounts created by wallets before staking). These accounts failed `decodeAccount` and logged `⚠️ [STAKE DECODE] Failed to decode account Gdtuo3zxK8SRUjpnwGoLyGuKQvWB6dJD8MtwfsD5ESMm, skipping.`
+
+### Fix Applied
+1. **`app/_layout.tsx` guard narrowed:** Changed `!inTabsGroup` to `isOnSignIn` (`segments[0] === 'sign-in'`). Now the redirect to `/staking` only fires when the user is explicitly on the sign-in screen and becomes authenticated — not on app boot or on arbitrary tab navigation.
+
+2. **`features/staking/use-get-stake-accounts.ts` pre-filter added to `parseStakeAccount`:**
+   - **Program owner check:** `raw.account.owner !== STAKE_PROGRAM_ADDRESS` — returns `null` immediately if the account is not owned by the Stake program.
+   - **Data size check:** `raw.account.space < MIN_STAKE_ACCOUNT_DATA_SIZE (200)` — skips emptying accounts that lack sufficient data to contain a valid `StakeStateV2`.
+
+3. **Test mock `owner` alignment:** Fixed the test mock's `STAKE_PROGRAM_ADDRESS` and `owner` fields from 40-char to 39-char string to match the real `Stake11111111111111111111111111111111111111` address. Also changed the stale-data pre-filter from `raw.account.data[1].length` (base64 string length, unreliable) to `raw.account.space` (on-chain storage allocation, reliable).
+
+### MWA/Solana Complexities Handled
+- **Auth guard lifecycle:** `MobileWalletProvider` with `AsyncStorage` caching performs an async `get()` on app boot → `useEffect` in `RootNavigator` reacts to `isAuthenticated` change. The previous `!inTabsGroup` guard was too broad; `isOnSignIn` is the narrowest guard that still works.
+- **`getProgramAccounts` returns owned-by-not-initialized accounts:** The memcmp filter at offset 44 returns all Stake-program-owned accounts matching the withdrawer authority, including accounts that exist but have never been initialized (zero data). Without the `space < 200` pre-filter, these accounts crash the decoder with opaque `RangeError` exceptions.
+
+### Test Baseline
+20 suites, 169 tests, 0 failures, 0 regressions. The `use-get-stake-accounts` suite continues at 7 tests. The `_layout.test.tsx` suite maintains 5 auth guard tests — the `isOnSignIn` guard change is backward-compatible with existing test assertions (`mockSegments` returns `['(tabs)']` or `['sign-in']`).
+
+### Commit
+`fix(account): defer MWA redirect to sign-in only, pre-filter empty stake accounts`
+
 ## 2026-07-29 — Serialization Fix: Explicit Primitive Casts for totalLamports and space
 
 ### Root Cause

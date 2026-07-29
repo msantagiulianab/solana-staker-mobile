@@ -68,10 +68,27 @@ export function extractVoterAndStake(
   }
 }
 
+// Minimum data size for an initialized Stake account.
+// StakeStateV2 requires at least 200 bytes of account data.
+const MIN_STAKE_ACCOUNT_DATA_SIZE = 200
+
 export function parseStakeAccount(
   raw: { pubkey: string; account: { lamports: number; data: [string, string]; owner: string; executable: boolean; rentEpoch: number; space: number } },
   currentEpoch: bigint,
 ): StakeAccountInfo | null {
+  // Pre-filter: skip accounts that are not owned by the Stake program
+  // or that have zero/inadequate data (uninitialized accounts).
+  // The `getProgramAccounts` memcmp filter returns all accounts owned by
+  // the Stake program matching the withdrawer authority, including
+  // empty placeholder accounts created by wallets before staking.
+  // These accounts have zero data and cannot be decoded as StakeStateV2.
+  if (raw.account.owner !== STAKE_PROGRAM_ADDRESS) {
+    return null
+  }
+  if (raw.account.space < MIN_STAKE_ACCOUNT_DATA_SIZE) {
+    return null
+  }
+
   // decodeAccount expects Branded nominal types (Lamports, Address).
   // We construct the encoded object using `as any` to satisfy the encoder's
   // runtime expectations — at runtime these are plain bigint/string values.

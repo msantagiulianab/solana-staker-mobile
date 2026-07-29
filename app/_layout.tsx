@@ -13,10 +13,17 @@ function RootNavigator() {
 
   useEffect(() => {
     const inTabsGroup = segments[0] === '(tabs)'
+    const isOnSignIn = segments[0] === 'sign-in'
 
     if (!isAuthenticated && inTabsGroup) {
       router.replace('/sign-in')
-    } else if (isAuthenticated && !inTabsGroup) {
+    } else if (isAuthenticated && isOnSignIn) {
+      // Only redirect to staking when the user is explicitly on the
+      // sign-in screen.  On app boot, the MobileWalletProvider restores
+      // the cached account from AsyncStorage asynchronously, which fires
+      // isAuthenticated: false → true while segments is still undefined
+      // (root path).  Without the `isOnSignIn` guard, that transition
+      // eagerly redirects to /staking without user interaction.
       router.replace('/staking')
     }
   }, [isAuthenticated, segments])

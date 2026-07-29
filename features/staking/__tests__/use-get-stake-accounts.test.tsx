@@ -71,7 +71,7 @@ jest.mock('@solana/kit', () => {
 // Mock @solana-program/stake (pure stub — decodeAccount is mocked above)
 // ---------------------------------------------------------------------------
 jest.mock('@solana-program/stake', () => ({
-  STAKE_PROGRAM_ADDRESS: 'Stake111111111111111111111111111111111111111',
+  STAKE_PROGRAM_ADDRESS: 'Stake11111111111111111111111111111111111111',
   getStakeStateAccountDecoder: () => ({ decode: () => ({}) }),
 }))
 
@@ -88,7 +88,7 @@ jest.mock('@wallet-ui/react-native-kit', () => {
       data: ['base64', 'mock-base64-data'],
       executable: false,
       lamports,
-      owner: 'Stake111111111111111111111111111111111111111',
+      owner: 'Stake11111111111111111111111111111111111111',
       rentEpoch: 0,
       space: 200,
     },
@@ -152,7 +152,7 @@ function makeAccountInfo(pubkey: string, lamports: number) {
       data: ['base64', 'mock-base64-data'],
       executable: false,
       lamports,
-      owner: 'Stake111111111111111111111111111111111111111',
+      owner: 'Stake11111111111111111111111111111111111111',
       rentEpoch: 0,
       space: 200,
     },
