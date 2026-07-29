@@ -665,6 +665,40 @@ Full test suite: **20 suites, 164 tests, 0 failures, 0 regressions**. The intera
 
 ---
 
+## 2026-07-29 — MWA Connection: Remove Automatic Retry on Failure (Touch Token Invalidation Fix)
+
+### Root Cause
+The catch block in `AccountFeatureConnect.handleConnect` was performing an automatic programmatic retry on connection failure: `disconnect()` → `connect()` without a fresh user tap gesture. On Android, the MWA protocol invalidates the user's touch interaction token after the first `connect()` call fails or returns. Any subsequent programmatic `connect()` invocation (without a new physical tap) is rejected by Phantom with `SolanaMobileWalletAdapterError: Local association cancelled by user`.
+
+### Fix Applied
+Replaced the nested try/catch retry logic in `features/account/account-feature-connect.tsx` with a flat error handler:
+
+1. **Removed the automatic retry block** (inner try/catch that called `disconnect()` then `connect()` again).
+2. **Simplified the catch block** to log the error and display a standard React Native `Alert.alert()` with the message "Unable to connect to your wallet. Please make sure Phantom is installed and try again."
+3. **Moved `isConnecting.current = false`** to a single `finally` block on the outer try/catch, ensuring the interaction lock is released on both success and failure paths.
+4. **Removed unused `disconnect`** from `useMobileWallet()` destructuring and from `useCallback` dependency array.
+
+### Decision Flow (Before vs After)
+| Path | Before (broken) | After (fixed) |
+|------|-----------------|---------------|
+| `connect()` succeeds | `router.replace('/staking')` | Same (unchanged) |
+| `connect()` fails | `disconnect()` → `connect()` (programmatic retry, always fails on Android) | `Alert.alert()` → user must physically tap again |
+| Double-tap guard | `isConnecting` ref gate | Same (unchanged) |
+
+### Why Not Clear the Auth Token on Failure?
+The previous code called `disconnect()` to wipe `AsyncStorage` before retrying. This was problematic for two reasons: (a) the automatic retry would always fail due to touch token invalidation, and (b) wiping the auth token on a connection timeout (network blip, Phantom not responding, etc.) would force users through a full re-authorization unnecessarily. The new approach leaves the cache intact and simply prompts the user — if the token is genuinely stale, `connect()` will re-prompt Phantom for authorization anyway.
+
+### MWA/Solana Complexities Handled
+- **Android touch interaction token lifecycle:** MWA wallet operations (authorize, sign, send) must be triggered by a user-initiated gesture. The OS invalidates the token after the gesture's associated operation completes or fails. Programmatic retries are silently rejected.
+- **`connect()` is already the first async operation** in the handler — no preceding `await` calls exist. The component was already compliant with rule #1 (immediate `connect()` after tap), but the catch block's automatic retry violated the spirit of the rule by re-invoking `connect()` without a fresh gesture.
+- **Interaction lock `finally` placement:** The `finally` block on the outer try/catch releases the lock on failure paths so the user can tap again. On success, `router.replace()` unmounts the component, garbage-collecting the ref.
+
+### Verification
+Full test suite: **20 suites, 166 tests, 0 failures, 0 regressions**. The change is purely structural (removing retry logic, flattening error handling); no new tests are needed since the MWA connection layer cannot be unit-tested (Phantom's external process).
+
+### Commit
+`fix(wallet): remove automatic MWA retry, enforce fresh user tap on failure`
+
 ## 2026-07-28 — User Cancellation Error Handling: MWA Back-Button Socket Sever
 
 ### Root Cause

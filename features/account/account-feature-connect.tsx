@@ -4,7 +4,7 @@ import { useMobileWallet } from '@wallet-ui/react-native-kit'
 import { useRouter } from 'expo-router'
 
 export function AccountFeatureConnect() {
-  const { account, connect, disconnect } = useMobileWallet()
+  const { account, connect } = useMobileWallet()
   const router = useRouter()
 
   // Interaction lock: prevents concurrent MWA handshakes from double-taps
@@ -35,9 +35,13 @@ export function AccountFeatureConnect() {
 
     try {
       console.log('[MWA:connect] ⏳ Triggering local connection pipeline...')
-      // IMPORTANT: router.replace() MUST NOT execute before connect()
-      // resolves. The component must stay mounted until the MWA handshake
-      // completes so the Android intent-receiving pipeline remains alive.
+      // IMPORTANT: connect() MUST be called as the first async operation
+      // after the user's tap gesture. Any preceding async work (fetching
+      // data, network calls, etc.) invalidates the Android touch interaction
+      // token, causing "Local association cancelled by user" errors.
+      // router.replace() MUST NOT execute before connect() resolves. The
+      // component must stay mounted until the MWA handshake completes so
+      // the Android intent-receiving pipeline remains alive.
       await connect()
       console.log('[MWA:connect] ✅ Handshake complete, routing to staking...')
       // Safe to navigate now — connect() has fully resolved and delivered
@@ -47,33 +51,22 @@ export function AccountFeatureConnect() {
       // router.replace(), so the ref is garbage-collected.
     } catch (error: any) {
       console.error('[MWA:connect] ❌ Connection failed:', error)
-
-      // Wipe the stale authToken from AsyncStorage to break the zombie-token
-      // loop.  Once the cache is cleared, the next authorizeSession() call
-      // will skip the reauthorize path and perform a clean authorize instead.
-      try {
-        console.log('[MWA:connect] 🔄 Clearing stale authToken from storage...')
-        await disconnect()
-        console.log('[MWA:connect] 🔄 Stale token cleared — retrying with clean authorize...')
-        await connect()
-        console.log('[MWA:connect] ✅ Clean authorize complete, routing to staking...')
-        router.replace('/staking')
-        // Lock intentionally left true here; navigation unmounts the component.
-      } catch (retryError: any) {
-        console.error('[MWA:connect] ❌ Clean authorize also failed:', retryError)
-        Alert.alert(
-          'Connection Failed',
-          'Unable to connect to your wallet. Please make sure Phantom is installed and try again.',
-        )
-      } finally {
-        // Release the interaction lock on every failure path so the user
-        // can tap again. This covers CancellationException, timeouts,
-        // disconnect() failures, and any other error that leaves the
-        // component mounted.
-        isConnecting.current = false
-      }
+      // Do NOT automatically retry. Android invalidates the user's touch
+      // interaction token on failure, so any programmatic retry (e.g.
+      // disconnect() then connect()) will always fail with
+      // "Local association cancelled by user". The user must physically
+      // tap the button again to initiate a fresh connection.
+      Alert.alert(
+        'Connection Failed',
+        'Unable to connect to your wallet. Please make sure Phantom is installed and try again.',
+      )
+    } finally {
+      // Release the interaction lock on every path. Success unmounts via
+      // router.replace() so the ref is garbage-collected; failure paths
+      // need the lock released so the user can tap again.
+      isConnecting.current = false
     }
-  }, [connect, disconnect, router])
+  }, [connect, router])
 
   return <Button disabled={!!account} title="Connect" onPress={handleConnect} />
 }
