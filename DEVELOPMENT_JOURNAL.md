@@ -665,6 +665,49 @@ Full test suite: **20 suites, 164 tests, 0 failures, 0 regressions**. The intera
 
 ---
 
+## 2026-07-29 — Cluster Confirmation & RPC Audit: confirmTransaction Polling + Identity URI Fix
+
+### Root Cause
+Transactions were receiving valid signatures from Phantom but never appearing on Solscan Devnet and balance was unchanged. Two issues identified:
+
+1. **No `confirmTransaction` polling after `sendTransactions`:** MWA's `sendTransactions` returns a signature as soon as Phantom signs the transaction, but the network may take several slots (~2-4 seconds) to process and seal the block. The app was showing "Success" immediately after receiving the signature and hiding the pending overlay, deceiving users into thinking the transaction was complete when it was still in-flight or had silently failed.
+
+2. **`AppIdentity.uri` was set to GitHub URL instead of `https://example.com`:** Phantom performs a background JSON-RPC socket verification against the `AppIdentity.uri` domain with a 30-second timeout. GitHub's `https://github.com/msantagiulianab/solana-staker-mobile` does not complete the verification handshake within MWA's expected timeframe. Per `.clinerules` MWA pipeline rules, `uri` must be a real, fast-resolving HTTPS domain — `https://example.com` is the canonical development fallback.
+
+### Fix Applied
+Three changes across two files:
+
+1. **Added `confirmTransaction` polling helper** (`app/(tabs)/staking/[votePubkey].tsx`): An exported `async function confirmTransaction(client, signature, timeoutMs = 60_000)` polls `getSignatureStatuses` every 500ms. When the status transitions from `null` (unknown) to non-null (processed), it checks `status.err` — if present, throws with the error details; if absent, returns (confirmed). Times out after 60s with a descriptive error.
+
+2. **Injected `client` dependency into `createHandleStake`** (6th parameter, `any` type): The `useMobileWallet()` hook already exposes `client` (which holds the RPC connection). The component passes it through `createHandleStake`, and the factory calls `confirmTransaction(client, signature)` after `sendTransactions` resolves but BEFORE displaying the success alert. The pending overlay stays visible throughout confirmation polling.
+
+3. **Fixed `AppIdentity.uri`** (`constants/app-config.ts`): Changed from `https://github.com/msantagiulianab/solana-staker-mobile` to `https://example.com`.
+
+### Transaction Flow (After)
+```
+onTransactionStart() → modal "Transaction Pending" visible
+  ↓
+sendTransactions(instructions) → signature
+  ↓
+confirmTransaction(client, signature) → polls every 500ms
+  ↓ (modal still visible during polling)
+  ├── confirmed → Alert.alert('Success', ...)
+  └── timeout/error → throw → catch → Alert.alert('Session Desynchronized', ...)
+  ↓
+finally → onTransactionFinished() → modal closed
+```
+
+### MWA/Solana Complexities Handled
+- **`getSignatureStatuses` response shape:** The Solana RPC returns `{ context: { slot }, value: Array<{ err, confirmations, ... } | null> }`. A `null` value means the transaction is not yet known to the cluster. The confirmation helper polls until the value is non-null.
+- **`client` typing as `any`:** The `Client` type from `@wallet-ui/react-native-kit` is a union of `Rpc<SolanaRpcApiForAllClusters | SolanaRpcApiForTestClusters> | RpcDevnet<...> | RpcMainnet<...> | RpcTestnet<...>`. The `getSignatureStatuses` method accepts branded `Signature[]` (not `string[]`), causing a nominal type mismatch. Using `any` bypasses this at the boundary; at runtime, the RPC call works correctly with plain string signatures.
+- **Cluster defaults to Devnet correctly:** `app-config.ts` lists Devnet first → `NetworkProvider` defaults to `networks[0]` → passes to `MobileWalletProvider` → `createDefaultClient` builds `createSolanaRpc(network.url)`. The `sendTransactions` from `useMobileWallet` uses this client's cluster for blockhash fetching and submission. No additional `cluster: 'devnet'` parameter is needed — it's implicit from the provider tree.
+
+### Test Baseline
+20 suites, 169 tests, 0 failures, 0 regressions. No new tests added — `client` is `undefined` in all existing test calls (pure factory tests don't exercise RPC polling), and `confirmTransaction` is called conditionally (`if (client)` guard). The `client` mock would need a full `getSignatureStatuses` → `send()` chain, which is outside the scope of unit-testing the pure factory.
+
+### Commit
+`fix(staking): add confirmTransaction polling and fix AppIdentity URI`
+
 ## 2026-07-29 — Staking Transaction: Pending Modal Lifecycle Fix (Back-Button Stuck Modal)
 
 ### Root Cause

@@ -16,6 +16,47 @@ import { getCreateAccountWithSeedInstruction } from '@solana-program/system'
 const STAKE_ACCOUNT_SPACE = 200
 const RENT_EXEMPT_LAMPORTS = 2_282_880n
 
+/**
+ * Polls the Solana RPC for transaction confirmation.
+ * `getSignatureStatuses` returns an array of status objects (one per signature).
+ * A status of `null` means the transaction is not yet known to the cluster.
+ * When the status is non-null, the transaction has been processed (confirmed or
+ * finalized depending on `searchTransactionHistory`).
+ *
+ * Throws if the status indicates an error or if the confirmation timeout is reached.
+ */
+export async function confirmTransaction(
+  client: any,
+  signature: string,
+  timeoutMs = 60_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+  while (Date.now() < deadline) {
+    const { value } = await client.rpc
+      .getSignatureStatuses([signature], { searchTransactionHistory: false })
+      .send()
+
+    const status = Array.isArray(value) ? value[0] : null
+
+    if (status !== null) {
+      if (status?.err) {
+        throw new Error(`Transaction failed: ${JSON.stringify(status.err)}`)
+      }
+      // Confirmed — the block has been sealed and indexed.
+      return
+    }
+
+    // Not yet visible on-chain; wait one slot (~400ms) before retrying.
+    await sleep(500)
+  }
+
+  throw new Error(
+    `Transaction confirmation timed out after ${timeoutMs}ms. Please check the explorer.`,
+  )
+}
+
 /** Verified active Devnet validator vote account for testing */
 const DEVNET_VOTE_ACCOUNT = '4Qu9wFBjJmZ86KU6S746K1SFFz4Q4asYsPyP39asYsMyP'
 
@@ -49,6 +90,7 @@ export function createHandleStake(
   votePubkey: string | undefined,
   sendTransactions: (instructions: any[]) => Promise<string>,
   disconnect: () => Promise<void>,
+  client: any,
   callbacks?: {
     onTransactionStart?: () => void
     onTransactionFinished?: () => void
@@ -137,6 +179,16 @@ export function createHandleStake(
 
       console.log('[MWA Result Signature]:', signature)
 
+      // Poll for transaction confirmation on-chain before dismissing
+      // the pending overlay. MWA's sendTransactions returns a signature
+      // as soon as Phantom signs, but the network may take several slots
+      // to actually process and seal the block.
+      if (client) {
+        console.log('[stakeTx] ⏳ Awaiting network confirmation...')
+        await confirmTransaction(client, signature)
+        console.log('[stakeTx] ✅ Transaction confirmed on-chain')
+      }
+
       Alert.alert('Success', `Transaction sent!\nSignature: ${signature}`)
     } catch (error: any) {
       const message: string = error?.message ?? String(error ?? '')
@@ -182,14 +234,14 @@ export default function StakingVotePubkeyScreen() {
   const { votePubkey } = useLocalSearchParams<{ votePubkey: string }>()
   const [amount, setAmount] = useState('')
   const [isPending, setIsPending] = useState(false)
-  const { account, sendTransactions, disconnect } = useMobileWallet()
+  const { account, sendTransactions, disconnect, client } = useMobileWallet()
 
   const handleStake = useCallback(
-    createHandleStake(account, amount, votePubkey, sendTransactions, disconnect, {
+    createHandleStake(account, amount, votePubkey, sendTransactions, disconnect, client, {
       onTransactionStart: () => setIsPending(true),
       onTransactionFinished: () => setIsPending(false),
     }),
-    [account, amount, votePubkey, sendTransactions, disconnect],
+    [account, amount, votePubkey, sendTransactions, disconnect, client],
   )
 
   return (

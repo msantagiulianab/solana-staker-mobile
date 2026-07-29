@@ -80,27 +80,27 @@ describe('Staking [votePubkey] screen', () => {
   })
 
   it('shows error alert when user is not connected', async () => {
-    const handleStake = createHandleStake(undefined, '', undefined, jest.fn(), jest.fn())
+    const handleStake = createHandleStake(undefined, '', undefined, jest.fn(), jest.fn(), undefined)
     await handleStake()
     expect(Alert.alert).toHaveBeenCalledWith('Error', 'Please connect your wallet first.')
   })
 
   it('shows error alert when amount is zero or invalid', async () => {
-    const handleStake = createHandleStake({ address: 'user123' }, '0', 'vote123', jest.fn(), jest.fn())
+    const handleStake = createHandleStake({ address: 'user123' }, '0', 'vote123', jest.fn(), jest.fn(), undefined)
     await handleStake()
     expect(Alert.alert).toHaveBeenCalledWith('Error', 'Please enter a valid amount greater than 0.')
   })
 
   it('uses devnet fallback when votePubkey is missing', async () => {
     const mockSend = jest.fn().mockResolvedValue('txFallback')
-    const handleStake = createHandleStake({ address: 'user123' }, '1.5', undefined, mockSend, jest.fn())
+    const handleStake = createHandleStake({ address: 'user123' }, '1.5', undefined, mockSend, jest.fn(), undefined)
     await handleStake()
     expect(mockSend).toHaveBeenCalledTimes(1)
   })
 
   it('builds and sends the correct staking transaction', async () => {
     const mockSend = jest.fn().mockResolvedValue('txSig555')
-    const handleStake = createHandleStake({ address: 'user123' }, '1.5', 'voteAddrABC', mockSend, jest.fn())
+    const handleStake = createHandleStake({ address: 'user123' }, '1.5', 'voteAddrABC', mockSend, jest.fn(), undefined)
     await handleStake()
 
     expect(createAddressWithSeed).toHaveBeenCalledTimes(1)
@@ -130,7 +130,7 @@ describe('Staking [votePubkey] screen', () => {
 
   it('shows success alert with transaction signature', async () => {
     const mockSend = jest.fn().mockResolvedValue('txSuccessABC')
-    const handleStake = createHandleStake({ address: 'user123' }, '1', 'voteAddrABC', mockSend, jest.fn())
+    const handleStake = createHandleStake({ address: 'user123' }, '1', 'voteAddrABC', mockSend, jest.fn(), undefined)
     await handleStake()
 
     expect(Alert.alert).toHaveBeenCalledWith('Success', 'Transaction sent!\nSignature: txSuccessABC')
@@ -139,7 +139,7 @@ describe('Staking [votePubkey] screen', () => {
   it('wipes stale token and alerts on send failure', async () => {
     const mockSend = jest.fn().mockRejectedValue(new Error('Session expired'))
     const mockDisconnect = jest.fn().mockResolvedValue(undefined)
-    const handleStake = createHandleStake({ address: 'user123' }, '1', 'voteAddrABC', mockSend, mockDisconnect)
+    const handleStake = createHandleStake({ address: 'user123' }, '1', 'voteAddrABC', mockSend, mockDisconnect, undefined)
     await handleStake()
 
     expect(mockDisconnect).toHaveBeenCalledTimes(1)
@@ -154,7 +154,7 @@ describe('Staking [votePubkey] screen', () => {
       new Error('Local association cancelled by user'),
     )
     const mockDisconnect = jest.fn().mockResolvedValue(undefined)
-    const handleStake = createHandleStake({ address: 'user123' }, '1', 'voteAddrABC', mockSend, mockDisconnect)
+    const handleStake = createHandleStake({ address: 'user123' }, '1', 'voteAddrABC', mockSend, mockDisconnect, undefined)
     await handleStake()
 
     expect(Alert.alert).toHaveBeenCalledWith(
@@ -170,7 +170,7 @@ describe('Staking [votePubkey] screen', () => {
       new Error('ERROR_LOCAL_ASSOCIATION_CANCELLED: socket closed'),
     )
     const mockDisconnect = jest.fn().mockResolvedValue(undefined)
-    const handleStake = createHandleStake({ address: 'user123' }, '1', 'voteAddrABC', mockSend, mockDisconnect)
+    const handleStake = createHandleStake({ address: 'user123' }, '1', 'voteAddrABC', mockSend, mockDisconnect, undefined)
     await handleStake()
 
     expect(Alert.alert).toHaveBeenCalledWith(
@@ -190,6 +190,7 @@ describe('Staking [votePubkey] screen', () => {
       'voteAddrABC',
       mockSend,
       jest.fn(),
+      undefined,
       { onTransactionStart: onStart, onTransactionFinished: onFinished },
     )
     await handleStake()
@@ -210,6 +211,7 @@ describe('Staking [votePubkey] screen', () => {
       'voteAddrABC',
       mockSend,
       jest.fn(),
+      undefined,
       { onTransactionStart: onStart, onTransactionFinished: onFinished },
     )
     await handleStake()
@@ -233,6 +235,7 @@ describe('Staking [votePubkey] screen', () => {
       'voteAddrABC',
       mockSend,
       mockDisconnect,
+      undefined,
       { onTransactionStart: onStart, onTransactionFinished: onFinished },
     )
     await handleStake()
