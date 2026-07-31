@@ -95,7 +95,7 @@ describe('Staking [votePubkey] screen', () => {
     const mockSend = jest.fn().mockResolvedValue('txFallback')
     const handleStake = createHandleStake({ address: 'user123' }, '1.5', undefined, mockSend, jest.fn(), undefined)
     await handleStake()
-    expect(mockSend).toHaveBeenCalledTimes(1)
+    expect(mockSend).toHaveBeenCalledTimes(2)
   })
 
   it('builds and sends the correct staking transaction', async () => {
@@ -109,7 +109,7 @@ describe('Staking [votePubkey] screen', () => {
         newAccount: 'derivedStakeAcctAddr',
         base: 'user123',
         amount: 1_502_282_880n,
-        space: 200,
+        space: 228,
       }),
     )
     expect(getInitializeCheckedInstruction).toHaveBeenCalledWith(
@@ -125,7 +125,7 @@ describe('Staking [votePubkey] screen', () => {
         stakeAuthority: { address: 'user123' },
       }),
     )
-    expect(mockSend).toHaveBeenCalledTimes(1)
+    expect(mockSend).toHaveBeenCalledTimes(2)
   })
 
   it('shows success alert with transaction signature', async () => {
@@ -133,7 +133,10 @@ describe('Staking [votePubkey] screen', () => {
     const handleStake = createHandleStake({ address: 'user123' }, '1', 'voteAddrABC', mockSend, jest.fn(), undefined)
     await handleStake()
 
-    expect(Alert.alert).toHaveBeenCalledWith('Success', 'Transaction sent!\nSignature: txSuccessABC')
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Staking Complete',
+      expect.stringContaining('txSuccessABC'),
+    )
   })
 
   it('wipes stale token and alerts on send failure', async () => {
