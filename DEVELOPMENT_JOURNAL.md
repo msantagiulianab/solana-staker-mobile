@@ -1,99 +1,5 @@
 # Development Journal
 
-## 2026-08-01 — MIT License
-
-### What Was Done
-Created the `LICENSE` file with the standard MIT License, copyright assigned to Michele Santagiuliana Busellato. Added a `## License` section to `README.md` referencing the file.
-
-### Files Changed
-| File | Change |
-|------|--------|
-| `LICENSE` | Created — MIT License with full name |
-| `README.md` | Added License section linking to LICENSE file |
-
-### Test Baseline
-No test impact — documentation-only change.
-
-### Commit
-`chore(config): add MIT license`
-
----
-
-## 2026-07-31 — Staking Delegate Flow On-Chain Fixes
-
-### Context
-Four structural errors prevented the staking delegate transaction from confirming on Solana Devnet via Phantom and Solflare. All four had root causes in the `[votePubkey].tsx` instruction-building pipeline: incorrect account space, wrong delegate slot account, v1/v2 instruction serialization mismatch, and Solflare's inability to simulate a delegate before the stake account exists on-chain.
-
-### Error 1 — Stake Account Space (Root Cause)
-**`STAKE_ACCOUNT_SPACE` was 200 bytes. The on-chain `StakeStateV2` struct is 228 bytes.** The `InitializeChecked` instruction failed because the account buffer was undersized — `getCreateAccountWithSeedInstruction` allocated 200 bytes but the stake program needed 228.
-
-**Fix:** Changed `STAKE_ACCOUNT_SPACE = 200` → `228`. Test assertion updated accordingly.
-
-### Error 2 — Delegate Instruction Slot 3 (Root Cause)
-**`getDelegateStakeInstruction` placed `userAddress` in slot 3 (`unused`), but the on-chain layout expects the Stake Config sysvar (`StakeConfig11111111111111111111111111111111`) in that slot.** Solflare's simulator could not map the unexpected account and rejected the simulation.
-
-**Fix:** Added `STAKE_CONFIG_ADDRESS` constant, changed `unused: userAddress` → `unused: address(STAKE_CONFIG_ADDRESS)`.
-
-### Error 3 — Instruction Serialization: v1/v2 Bridge Gap (Root Cause)
-**`@solana/kit` v2 instruction builders produce `Object.freeze()`'d objects with `address` (v2) and `role` enum fields. The MWA bridge accesses `accountMeta.pubkey`, `isSigner`, `isWritable` (v1).** Without normalization, the bridge encountered `undefined` on `.pubkey` and crashed silently — the wallet modal never appeared.
-
-**Fix:** Added `normalizeInstruction(ix)` function that:
-- Spreads frozen objects into mutable clones (`{ ...(a ?? {}) }`)
-- Adds `pubkey` alias from `address`
-- Derives `isSigner = (role & 2) !== 0` (bit 1) and `isWritable = (role & 1) !== 0` (bit 0 LSB) from the v2 `role` enum (0=READONLY, 1=WRITABLE, 2=READONLY_SIGNER, 3=WRITABLE_SIGNER)
-- Adds `keys` and `programId` aliases for broader bridge compatibility
-
-A companion `normalizeAndSign()` wrapper also marks `isSigner = true` on any key matching the user's address.
-
-### Error 4 — Two-Step Transaction Flow (Root Cause)
-**Solflare's simulator evaluates each `sendTransactions` call in isolation. A single call with [create, initialize, delegate] means the delegate instruction simulates before the stake account exists on-chain.** This caused "Account not found" simulation errors.
-
-**Fix:** Split into two `sendTransactions` calls with inter-step `confirmTransaction`:
-- Step 1: `sendTransactions([createIx, initIx])` → `confirmTransaction(client, sig1)` → stake account confirmed on-chain
-- Step 2: `sendTransactions([delegateIx])` → `confirmTransaction(client, sig2)` → delegation confirmed
-
-The pending modal remains visible across both steps. Test updated: `expect(mockSend).toHaveBeenCalledTimes(1)` → `2`.
-
-### Additional Hardening
-- **Pre-flight RPC health check:** `getLatestBlockhash()` called before instruction construction to catch rate-limited/offline endpoints early, preventing silent MWA intent timeouts. Gated behind `if (client)` — skipped in tests.
-- **Diagnostic probes:** Structured `console.log` for each step's instruction count, account metadata, and program IDs — enables post-mortem debugging without a debugger attached.
-- **Extended cancellation detection:** Added `'CancellationException'` and `'SolanaMobileWalletAdapterError'` error name checks to the cancellation guard (previously only checked message strings).
-
-### MWA/Solana Complexities Handled
-- **`Object.freeze()` bypass:** Spread operator creates a mutable clone, enabling v1 → v2 alias injection.
-- **Role bitmask derivation:** Pure bitwise arithmetic — no external dependency. Bit 0 = writable, bit 1 = signer.
-- **`createAddressWithSeed`** replaces `generateKeyPairSigner()` — deterministic PDA derivation works with MWA (which can't sign ephemeral keypairs).
-
-### Test Baseline
-20 suites, 169 tests, 0 failures, 0 regressions. VotePubkey suite: call count 1→2, space 200→228, success alert text matches two-signature output.
-
-### Commit
-`fix(staking): resolve MWA serialization, account-space, and instruction-layout errors in delegate flow`
-
----
-
-## 2026-07-23 — StakeManagerModal Progress State Machine Coverage
-
-### Architectural Decisions
-- **Operation-context-aware progress rows:** Extracted `createProgressRows(ctx: OperationContext)` pure factory that produces `ProgressRow[]` with context-specific labels for `'stake'`, `'deactivate'`, and `'withdraw'` operations. Each context has three distinct label strings that avoid visual ambiguity across the three transaction types.
-- **`OperationContext` type:** Union type `'stake' | 'deactivate' | 'withdraw'` exported for type-safe factory invocation. Unknown contexts fall back to the default `PROGRESS_ROWS` constant for backward compatibility.
-- **Enum-exhaustive testing:** Added a `getRowVisualState` test that iterates all `TransactionStatus` × all three `PROGRESS_ROWS` statuses and asserts the result is always one of `'pending' | 'active' | 'complete'`.
-- **5-state lifecycle test:** `getCurrentStepIndex` now has a single test that maps all five `TransactionStatus` values through the function and asserts `[-1, 0, 1, 2, -1]`.
-
-### Tests Added (8 new, 164 total)
-| Suite | Tests | Status |
-|-------|-------|--------|
-| `getCurrentStepIndex` 5-state lifecycle | 1 | ✅ |
-| `getRowVisualState` exhaustive enum | 1 | ✅ |
-| `createProgressRows` context factory | 6 | ✅ |
-| **StakeManagerModal total** | **51** (was 43) | ✅ |
-| **Full suite** | **164** (was 156) | ✅ |
-
-### Solana/Wallet Complexities
-- The `@solana/kit` and `@solana-program/stake` ESM import chain must be mocked inline before the dynamic import in the test file to prevent Jest from trying to resolve the native ESM modules.
-- The pre-existing TS error on line 304 (`createHandleWithdraw` returns `Promise<string | undefined>` but `createHandleDeactivateFlow` expects `() => void | Promise<void>`) remains a known type-mismatch between the withdraw factory signature and the deactivation flow wrapper — will be addressed in a follow-up type refactor.
-- Live Devnet smoke testing (Task 1) is pending — requires physical device or emulator with a Devnet-funded Phantom wallet.
-
 ## 2026-07-11 — Full Feature Implementation
 
 ### Architectural Decisions
@@ -710,6 +616,30 @@ All 10 withdraw-stake tests pass. Global sweep: **20 suites, 156 tests, 0 failur
 
 ---
 
+## 2026-07-23 — StakeManagerModal Progress State Machine Coverage
+
+### Architectural Decisions
+- **Operation-context-aware progress rows:** Extracted `createProgressRows(ctx: OperationContext)` pure factory that produces `ProgressRow[]` with context-specific labels for `'stake'`, `'deactivate'`, and `'withdraw'` operations. Each context has three distinct label strings that avoid visual ambiguity across the three transaction types.
+- **`OperationContext` type:** Union type `'stake' | 'deactivate' | 'withdraw'` exported for type-safe factory invocation. Unknown contexts fall back to the default `PROGRESS_ROWS` constant for backward compatibility.
+- **Enum-exhaustive testing:** Added a `getRowVisualState` test that iterates all `TransactionStatus` × all three `PROGRESS_ROWS` statuses and asserts the result is always one of `'pending' | 'active' | 'complete'`.
+- **5-state lifecycle test:** `getCurrentStepIndex` now has a single test that maps all five `TransactionStatus` values through the function and asserts `[-1, 0, 1, 2, -1]`.
+
+### Tests Added (8 new, 164 total)
+| Suite | Tests | Status |
+|-------|-------|--------|
+| `getCurrentStepIndex` 5-state lifecycle | 1 | ✅ |
+| `getRowVisualState` exhaustive enum | 1 | ✅ |
+| `createProgressRows` context factory | 6 | ✅ |
+| **StakeManagerModal total** | **51** (was 43) | ✅ |
+| **Full suite** | **164** (was 156) | ✅ |
+
+### Solana/Wallet Complexities
+- The `@solana/kit` and `@solana-program/stake` ESM import chain must be mocked inline before the dynamic import in the test file to prevent Jest from trying to resolve the native ESM modules.
+- The pre-existing TS error on line 304 (`createHandleWithdraw` returns `Promise<string | undefined>` but `createHandleDeactivateFlow` expects `() => void | Promise<void>`) remains a known type-mismatch between the withdraw factory signature and the deactivation flow wrapper — will be addressed in a follow-up type refactor.
+- Live Devnet smoke testing (Task 1) is pending — requires physical device or emulator with a Devnet-funded Phantom wallet.
+
+---
+
 ## 2026-07-28 — MWA CancellationException: Concurrent Handshake Race Condition Fix
 
 ### Root Cause
@@ -734,6 +664,55 @@ The `CancellationException` on the MWA connection pipeline was caused by a lifec
 
 ### Verification
 Full test suite: **20 suites, 164 tests, 0 failures, 0 regressions**. The interaction lock is a runtime concurrency guard at the MWA bridge layer and does not affect the existing test suite (which mocks `useMobileWallet`).
+
+---
+## 2026-07-28 — User Cancellation Error Handling: MWA Back-Button Socket Sever
+
+### Root Cause
+When a user confirms a staking transaction inside Phantom and immediately presses the Android back button, the MWA WebSocket severs before the return intent delivers the confirmation payload to the app. This throws an unhandled `Local association cancelled by user` / `ERROR_LOCAL_ASSOCIATION_CANCELLED` rejection. Previously, the `catch` block treated ALL errors as stale-token session desyncs, wiping the auth token from AsyncStorage and showing "Session Desynchronized" — even though the transaction may have already been submitted on-chain.
+
+### Fix Applied
+In `app/(tabs)/staking/[votePubkey].tsx` `createHandleStake` factory, the `catch` block now discriminates between user cancellation and genuine session errors:
+
+```typescript
+const message: string = error?.message ?? String(error ?? '')
+const isUserCancelled =
+  message.includes('cancelled by user') ||
+  message.includes('ERROR_LOCAL_ASSOCIATION_CANCELLED')
+
+if (isUserCancelled) {
+  Alert.alert(
+    'Transaction Pending',
+    'Please check your wallet history to confirm execution.',
+  )
+  return // Do NOT wipe the auth token
+}
+```
+
+### Why Not Reset the Auth Token on Cancellation?
+The user's session is still valid — Phantom authorized the transaction and may have already submitted it to the network. Wiping `AsyncStorage` would force the user to reconnect unnecessarily. Instead, the app informs them that the transaction may be pending and directs them to check their wallet history.
+
+### Decision Flow
+| Error Message | Action |
+|---|---|
+| `"cancelled by user"` or `"ERROR_LOCAL_ASSOCIATION_CANCELLED"` | Alert "Transaction Pending" — do NOT disconnect |
+| Any other error (stale token, RPC timeout, etc.) | `disconnect()` + Alert "Session Desynchronized" |
+
+### Tests Added (2 tests)
+| Test | Status |
+|------|--------|
+| `shows pending alert on user cancellation (back button)` | ✅ |
+| `shows pending alert on ERROR_LOCAL_ASSOCIATION_CANCELLED code` | ✅ |
+
+Both tests assert that `Alert.alert` is called with `'Transaction Pending'` / `'Please check your wallet history to confirm execution.'` and that `mockDisconnect` is NOT called — confirming the auth token is preserved.
+
+### MWA/Solana Complexities Handled
+- The MWA bridge's `sendTransactions()` promise rejects with `"Local association cancelled by user"` when the socket closes before the return intent arrives. The error code `ERROR_LOCAL_ASSOCIATION_CANCELLED` may also appear in the message.
+- Transaction confirmation from Phantom is asynchronous — the wallet may have submitted the tx to the network before the socket closed. Informing the user to check their wallet history is the safest recovery path.
+- The pure factory pattern (`createHandleStake`) keeps this logic fully testable without rendering any component — both new tests are pure async function invocations with mock `sendTransactions` and `disconnect`.
+
+### Verification
+Full test suite: **20 suites, 166 tests, 0 failures, 0 regressions**. The existing 10 votePubkey tests continue to pass; the old `'wipes stale token and alerts on send failure'` test still uses a generic `Error('Session expired')` which does not match the cancellation string check, preserving the original behavior for non-cancellation errors.
 
 ---
 
@@ -924,50 +903,73 @@ Full test suite: **20 suites, 166 tests, 0 failures, 0 regressions**. The change
 ### Commit
 `fix(wallet): remove automatic MWA retry, enforce fresh user tap on failure`
 
-## 2026-07-28 — User Cancellation Error Handling: MWA Back-Button Socket Sever
 
-### Root Cause
-When a user confirms a staking transaction inside Phantom and immediately presses the Android back button, the MWA WebSocket severs before the return intent delivers the confirmation payload to the app. This throws an unhandled `Local association cancelled by user` / `ERROR_LOCAL_ASSOCIATION_CANCELLED` rejection. Previously, the `catch` block treated ALL errors as stale-token session desyncs, wiping the auth token from AsyncStorage and showing "Session Desynchronized" — even though the transaction may have already been submitted on-chain.
+## 2026-07-31 — Staking Delegate Flow On-Chain Fixes
 
-### Fix Applied
-In `app/(tabs)/staking/[votePubkey].tsx` `createHandleStake` factory, the `catch` block now discriminates between user cancellation and genuine session errors:
+### Context
+Four structural errors prevented the staking delegate transaction from confirming on Solana Devnet via Phantom and Solflare. All four had root causes in the `[votePubkey].tsx` instruction-building pipeline: incorrect account space, wrong delegate slot account, v1/v2 instruction serialization mismatch, and Solflare's inability to simulate a delegate before the stake account exists on-chain.
 
-```typescript
-const message: string = error?.message ?? String(error ?? '')
-const isUserCancelled =
-  message.includes('cancelled by user') ||
-  message.includes('ERROR_LOCAL_ASSOCIATION_CANCELLED')
+### Error 1 — Stake Account Space (Root Cause)
+**`STAKE_ACCOUNT_SPACE` was 200 bytes. The on-chain `StakeStateV2` struct is 228 bytes.** The `InitializeChecked` instruction failed because the account buffer was undersized — `getCreateAccountWithSeedInstruction` allocated 200 bytes but the stake program needed 228.
 
-if (isUserCancelled) {
-  Alert.alert(
-    'Transaction Pending',
-    'Please check your wallet history to confirm execution.',
-  )
-  return // Do NOT wipe the auth token
-}
-```
+**Fix:** Changed `STAKE_ACCOUNT_SPACE = 200` → `228`. Test assertion updated accordingly.
 
-### Why Not Reset the Auth Token on Cancellation?
-The user's session is still valid — Phantom authorized the transaction and may have already submitted it to the network. Wiping `AsyncStorage` would force the user to reconnect unnecessarily. Instead, the app informs them that the transaction may be pending and directs them to check their wallet history.
+### Error 2 — Delegate Instruction Slot 3 (Root Cause)
+**`getDelegateStakeInstruction` placed `userAddress` in slot 3 (`unused`), but the on-chain layout expects the Stake Config sysvar (`StakeConfig11111111111111111111111111111111`) in that slot.** Solflare's simulator could not map the unexpected account and rejected the simulation.
 
-### Decision Flow
-| Error Message | Action |
-|---|---|
-| `"cancelled by user"` or `"ERROR_LOCAL_ASSOCIATION_CANCELLED"` | Alert "Transaction Pending" — do NOT disconnect |
-| Any other error (stale token, RPC timeout, etc.) | `disconnect()` + Alert "Session Desynchronized" |
+**Fix:** Added `STAKE_CONFIG_ADDRESS` constant, changed `unused: userAddress` → `unused: address(STAKE_CONFIG_ADDRESS)`.
 
-### Tests Added (2 tests)
-| Test | Status |
-|------|--------|
-| `shows pending alert on user cancellation (back button)` | ✅ |
-| `shows pending alert on ERROR_LOCAL_ASSOCIATION_CANCELLED code` | ✅ |
+### Error 3 — Instruction Serialization: v1/v2 Bridge Gap (Root Cause)
+**`@solana/kit` v2 instruction builders produce `Object.freeze()`'d objects with `address` (v2) and `role` enum fields. The MWA bridge accesses `accountMeta.pubkey`, `isSigner`, `isWritable` (v1).** Without normalization, the bridge encountered `undefined` on `.pubkey` and crashed silently — the wallet modal never appeared.
 
-Both tests assert that `Alert.alert` is called with `'Transaction Pending'` / `'Please check your wallet history to confirm execution.'` and that `mockDisconnect` is NOT called — confirming the auth token is preserved.
+**Fix:** Added `normalizeInstruction(ix)` function that:
+- Spreads frozen objects into mutable clones (`{ ...(a ?? {}) }`)
+- Adds `pubkey` alias from `address`
+- Derives `isSigner = (role & 2) !== 0` (bit 1) and `isWritable = (role & 1) !== 0` (bit 0 LSB) from the v2 `role` enum (0=READONLY, 1=WRITABLE, 2=READONLY_SIGNER, 3=WRITABLE_SIGNER)
+- Adds `keys` and `programId` aliases for broader bridge compatibility
+
+A companion `normalizeAndSign()` wrapper also marks `isSigner = true` on any key matching the user's address.
+
+### Error 4 — Two-Step Transaction Flow (Root Cause)
+**Solflare's simulator evaluates each `sendTransactions` call in isolation. A single call with [create, initialize, delegate] means the delegate instruction simulates before the stake account exists on-chain.** This caused "Account not found" simulation errors.
+
+**Fix:** Split into two `sendTransactions` calls with inter-step `confirmTransaction`:
+- Step 1: `sendTransactions([createIx, initIx])` → `confirmTransaction(client, sig1)` → stake account confirmed on-chain
+- Step 2: `sendTransactions([delegateIx])` → `confirmTransaction(client, sig2)` → delegation confirmed
+
+The pending modal remains visible across both steps. Test updated: `expect(mockSend).toHaveBeenCalledTimes(1)` → `2`.
+
+### Additional Hardening
+- **Pre-flight RPC health check:** `getLatestBlockhash()` called before instruction construction to catch rate-limited/offline endpoints early, preventing silent MWA intent timeouts. Gated behind `if (client)` — skipped in tests.
+- **Diagnostic probes:** Structured `console.log` for each step's instruction count, account metadata, and program IDs — enables post-mortem debugging without a debugger attached.
+- **Extended cancellation detection:** Added `'CancellationException'` and `'SolanaMobileWalletAdapterError'` error name checks to the cancellation guard (previously only checked message strings).
 
 ### MWA/Solana Complexities Handled
-- The MWA bridge's `sendTransactions()` promise rejects with `"Local association cancelled by user"` when the socket closes before the return intent arrives. The error code `ERROR_LOCAL_ASSOCIATION_CANCELLED` may also appear in the message.
-- Transaction confirmation from Phantom is asynchronous — the wallet may have submitted the tx to the network before the socket closed. Informing the user to check their wallet history is the safest recovery path.
-- The pure factory pattern (`createHandleStake`) keeps this logic fully testable without rendering any component — both new tests are pure async function invocations with mock `sendTransactions` and `disconnect`.
+- **`Object.freeze()` bypass:** Spread operator creates a mutable clone, enabling v1 → v2 alias injection.
+- **Role bitmask derivation:** Pure bitwise arithmetic — no external dependency. Bit 0 = writable, bit 1 = signer.
+- **`createAddressWithSeed`** replaces `generateKeyPairSigner()` — deterministic PDA derivation works with MWA (which can't sign ephemeral keypairs).
 
-### Verification
-Full test suite: **20 suites, 166 tests, 0 failures, 0 regressions**. The existing 10 votePubkey tests continue to pass; the old `'wipes stale token and alerts on send failure'` test still uses a generic `Error('Session expired')` which does not match the cancellation string check, preserving the original behavior for non-cancellation errors.
+### Test Baseline
+20 suites, 169 tests, 0 failures, 0 regressions. VotePubkey suite: call count 1→2, space 200→228, success alert text matches two-signature output.
+
+### Commit
+`fix(staking): resolve MWA serialization, account-space, and instruction-layout errors in delegate flow`
+
+---
+
+## 2026-08-01 — MIT License
+
+### What Was Done
+Created the `LICENSE` file with the standard MIT License, copyright assigned to Michele Santagiuliana Busellato. Added a `## License` section to `README.md` referencing the file.
+
+### Files Changed
+| File | Change |
+|------|--------|
+| `LICENSE` | Created — MIT License with full name |
+| `README.md` | Added License section linking to LICENSE file |
+
+### Test Baseline
+No test impact — documentation-only change.
+
+### Commit
+`chore(config): add MIT license`
