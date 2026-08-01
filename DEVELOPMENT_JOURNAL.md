@@ -1,5 +1,121 @@
 # Development Journal
 
+## 2026-07-31 — Staking Delegate Flow: Serialization, Account-Space, and Instruction-Layout Fixes
+
+### Root Cause
+Three distinct errors were preventing the staking delegate transaction from reaching on-chain confirmation on Solana Devnet via Phantom and Solflare:
+
+1. **`STAKE_ACCOUNT_SPACE` was 200 instead of 228 bytes.** The on-chain stake account struct is 228 bytes, not 200. When `getCreateAccountWithSeedInstruction` allocates with `space: 200`, the resulting account is too small to hold `StakeStateV2` — `InitializeChecked` fails because the account buffer is undersized. This is distinct from the rent-exempt calculation (which is separate from the space allocation).
+
+2. **`getDelegateStakeInstruction` was incorrectly passing `userAddress` into the `unused` slot.** The stake delegate instruction layout has 4 fixed slots: stake account, vote account (validator), stake config account (slot 3, always `StakeConfig11111111111111111111111111111111`), and stake authority (slot 5, the signer slot). The old code was placing `userAddress` in slot 3, which threw Solflare's simulation off — the simulator could not map the unexpected account to the expected `StakeConfig` sysvar.
+
+3. **The `@solana/kit` v2 instruction builders produce `Object.freeze()`'d objects with `address` (v2 convention) and `role` enum fields, but the MWA bridge (`sendTransactions`) accesses `accountMeta.pubkey`, `accountMeta.isSigner`, and `accountMeta.isWritable` (v1 convention).** Without normalization, the MWA bridge encounters `undefined` on `.pubkey` and crashes silently — the wallet modal never appears and the intent eventually times out with `CancellationException`.
+
+4. **Single-transaction flow (create + initialize + delegate in one `sendTransactions` call) caused Solflare simulation failures.** Solflare's simulator could not resolve the seeded stake account address before the delegate instruction executed in the same transaction message. The stake account must exist on-chain before delegation can be simulated.
+
+### Fix Applied — Seven Structural Changes
+
+#### 1. Corrected `STAKE_ACCOUNT_SPACE` (200 → 228)
+```typescript
+const STAKE_ACCOUNT_SPACE = 228 // was 200
+```
+Test assertion updated: `space: 228` in the instruction verification test.
+
+#### 2. Added `STAKE_CONFIG_ADDRESS` Constant and Fixed Delegate Slot 3
+```typescript
+const STAKE_CONFIG_ADDRESS = 'StakeConfig11111111111111111111111111111111'
+```
+Old code: `unused: userAddress` → New code: `unused: address(STAKE_CONFIG_ADDRESS)`. This places the canonical Stake Config sysvar in slot 3, matching the on-chain instruction layout.
+
+#### 3. Added `normalizeInstruction()` with Role → isSigner/isWritable Derivation
+A new `normalizeInstruction(ix)` function (lines 74–107) clones each instruction and ensures every account meta has both v1 (`pubkey`, `isSigner`, `isWritable`) and v2 (`address`, `role`) properties. The key innovation is **role-bitflag derivation**: the `@solana/kit` v2 builders produce a `role` enum (0=READONLY, 1=WRITABLE, 2=READONLY_SIGNER, 3=WRITABLE_SIGNER). The function extracts:
+- `isSigner = (role & 2) !== 0` (bit 1)
+- `isWritable = (role & 1) !== 0` (bit 0, LSB)
+
+This is applied via `normalizeAndSign()` which also sets `isSigner = true` on any key matching the user's address.
+
+#### 4. Split Single `sendTransactions` into Two-Step Flow
+Old flow: `sendTransactions([createIx, initIx, delegateIx])` — single MWA call.
+New flow:
+- **Step 1:** `sendTransactions([createIx, initIx])` → `confirmTransaction(client, sig1)` → stake account exists on-chain
+- **Step 2:** `sendTransactions([delegateIx])` → `confirmTransaction(client, sig2)`
+
+The inter-step `confirmTransaction` ensures the initialized stake account is visible to Solflare's step 2 simulation. The pending modal stays active across both steps — only one `onTransactionStart()`/`onTransactionFinished()` pair is fired.
+
+**Test update:** `expect(mockSend).toHaveBeenCalledTimes(1)` → `2` (two `sendTransactions` calls).
+
+#### 5. Added Pre-Flight RPC Health Check
+Before building instructions, the factory calls `client.rpc.getLatestBlockhash().send()` to verify the RPC endpoint is healthy. If the returned `blockhash` is null/undefined or the call throws, the factory shows `Alert.alert('Network Unavailable', ...)` and returns early — preventing the MWA intent from launching with a corrupt transaction that would silently time out.
+
+This check is gated behind `if (client)` — when `client` is `undefined` (test environment), the check is skipped entirely. No test impact.
+
+#### 6. Added Instruction-Structure Diagnostic Probes
+After building and normalizing each step's instructions, the factory logs:
+- Instruction count, each instruction's constructor name, account count, data type, and program ID
+- The full `keys` array with `pubkey`/`isSigner`/`isWritable` per account
+
+These structured `console.log` probes emit JSON for every instruction array dispatched to `sendTransactions`, enabling post-mortem debugging of serialization issues without a debugger attached.
+
+#### 7. Extended User-Cancellation Detection
+The cancellation guard now checks four conditions instead of two:
+```typescript
+const isUserCancelled =
+  message.includes('cancelled by user') ||
+  message.includes('ERROR_LOCAL_ASSOCIATION_CANCELLED') ||
+  message.includes('CancellationException') ||           // NEW
+  errorName === 'SolanaMobileWalletAdapterError'          // NEW
+```
+`CancellationException` is the error type thrown by `@solana-mobile/mobile-wallet-adapter-protocol-web3js` when the MWA WebSocket closes without a return intent. `SolanaMobileWalletAdapterError` is the Phantom-specific error name variant. Both indicate the user dismissed Phantom or pressed Android back — neither should trigger an auth token wipe.
+
+### Transaction Flow (After — Full Pipe)
+```
+onTransactionStart() → modal visible
+  ↓
+RPC health check (getLatestBlockhash)
+  ↓
+createAddressWithSeed(userAddress, seed, STAKE_PROGRAM)
+  ↓
+Step 1: normalizeAndSign([createAccountIx, initializeIx])
+  ↓
+sendTransactions(step1) → sig1
+  ↓
+confirmTransaction(client, sig1) → stake account on-chain
+  ↓
+Step 2: normalizeAndSign([delegateIx])
+  ↓
+sendTransactions(step2) → sig2
+  ↓
+confirmTransaction(client, sig2) → delegation confirmed
+  ↓
+Alert.alert('Staking Complete', sig1 + sig2)
+  ↓
+finally → onTransactionFinished() → modal closes
+```
+
+### Files Changed
+| File | Change | Lines |
+|------|--------|-------|
+| `app/(tabs)/staking/[votePubkey].tsx` | Seven structural fixes, two-step flow, normalization, RPC health check | +231 |
+| `app/(tabs)/staking/__tests__/votePubkey.test.tsx` | `sendTransactions` call count: 1→2, space assertion: 200→228, success alert text updated to match two-step output | ~11 |
+| `app/_layout.tsx` | Auth guard refinement (carried from previous commit, no new logic) | ~9 |
+| `features/staking/use-get-stake-accounts.ts` | Pre-filter guard (carried from previous commit) | ~17 |
+| `features/staking/__tests__/use-get-stake-accounts.test.tsx` | Mock owner alignment (carried from previous commit) | ~6 |
+
+### MWA/Solana Complexities Handled
+- **`Object.freeze()` and `@solana/kit` v2 builders:** The `@solana-program/*` instruction builders return frozen objects. `normalizeInstruction()` spreads via `{ ...(a ?? {}) }` to create a mutable clone before adding v1 aliases, bypassing the freeze.
+- **Role bitmask derivation:** The `role` enum from v2 builders uses bit 0 for writable, bit 1 for signer. This is derived with bitwise AND operations (`(r & 1) !== 0` and `(r & 2) !== 0`) — no external dependency needed.
+- **`createAddressWithSeed`**: Replaces `generateKeyPairSigner()` for stake account derivation. The seed `"stake:${Date.now()}"` is deterministic for the user's address — the same seed always produces the same PDA-derived address, avoiding the need for an ephemeral keypair (which MWA cannot sign).
+- **Two-step flow with inter-step confirmation:** Solflare's simulation engine evaluates each `sendTransactions` call in isolation. By confirming step 1 on-chain before dispatching step 2, the initialized stake account is visible to step 2's simulation — no more "Account not found" simulation failures.
+- **RPC health check prevents silent timeouts:** `sendTransactions` internally calls `getLatestBlockhash()` — if the RPC returns an empty blockhash, the transaction message is built with corrupt data and the wallet hangs. The pre-flight check catches this early with a clear user-facing error.
+
+### Test Baseline
+20 suites, 169 tests, 0 failures, 0 regressions. The votePubkey suite updated 2 assertions (call count + space), and the success alert text assertion updated to match the two-signature output format.
+
+### Commit
+`fix(staking): resolve MWA serialization, account-space, and instruction-layout errors in delegate flow`
+
+---
+
 ## 2026-08-01 — MIT License
 
 ### Architectural Decisions
