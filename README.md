@@ -47,6 +47,10 @@ The `Address` type from `@solana/kit` is a branded nominal type (`NominalType<"b
 ### Phantom / MWA Connection
 The app uses `@wallet-ui/react-native-kit` which wraps `@solana/kit` v2 and implements the Mobile Wallet Adapter protocol. Connection flow: `NetworkProvider` → `MobileWalletProvider` (reads `selectedNetwork`) → children. Wallet state is accessed via `useMobileWallet()` hook exposing `account`, `connect`, `disconnect`, `signMessages`, `chain`, and `client`.
 
+## License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+
 ## Test Status
 
 **20 suites · 169 tests · 100% passing**

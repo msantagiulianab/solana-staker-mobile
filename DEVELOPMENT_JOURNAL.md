@@ -1,5 +1,25 @@
 # Development Journal
 
+## 2026-08-01 — MIT License
+
+### Architectural Decisions
+- Created `LICENSE` file with the standard MIT License, copyright assigned to Michele Santagiuliana Busellato.
+- Added `## License` section to `README.md` referencing the LICENSE file, placed before the Test Status section for visibility.
+
+### Files Changed
+| File | Change |
+|------|--------|
+| `LICENSE` | Created — MIT License with full name |
+| `README.md` | Added License section linking to LICENSE file |
+
+### Test Baseline
+No test impact — documentation-only change.
+
+### Commit
+`chore(config): add MIT license`
+
+---
+
 ## 2026-07-23 — StakeManagerModal Progress State Machine Coverage
 
 ### Architectural Decisions
